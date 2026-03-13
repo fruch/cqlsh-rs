@@ -1,13 +1,13 @@
 # Benchmark CI — tracks performance across merges and on-demand for PRs.
 #
 # Triggers:
-#   - Every push to main (historical tracking)
-#   - PRs when the "benchmark" label is added
+#   - Every push to main (historical tracking + GitHub Pages deploy)
+#   - PRs when the "benchmark" label is added (regression alerts)
 #   - Weekly Monday 06:00 UTC (catch dependency regressions)
 #   - Manual dispatch
 #
-# Results are stored on gh-pages branch for trend visualization at:
-#   https://<owner>.github.io/cqlsh-rs/dev/bench/
+# Historical dashboard deployed to GitHub Pages at:
+#   https://fruch.github.io/cqlsh-rs/dev/bench/
 
 name: Benchmarks
 
@@ -23,6 +23,8 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  pages: write
+  id-token: write
 
 jobs:
   benchmark:
@@ -53,11 +55,18 @@ jobs:
       - name: Run benchmarks
         run: cargo bench --bench startup -- --output-format bencher | tee output.txt
 
-      - name: Upload criterion artifacts
+      - name: Upload criterion HTML report
         uses: actions/upload-artifact@v4
         with:
-          name: benchmark-results-${{ github.sha }}
+          name: criterion-report-${{ github.sha }}
           path: target/criterion/
+          retention-days: 90
+
+      - name: Upload raw benchmark output
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-output-${{ github.sha }}
+          path: output.txt
           retention-days: 90
 
       - name: Store results & track history
@@ -66,7 +75,7 @@ jobs:
           tool: 'cargo'
           output-file-path: output.txt
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          # Only push historical data on main merges (not PRs)
+          # Only push historical data on main merges (not PRs/schedule)
           auto-push: ${{ github.event_name == 'push' }}
           # Alert if any benchmark regresses >50% from baseline
           alert-threshold: '150%'
@@ -76,3 +85,32 @@ jobs:
           fail-on-alert: false
           # Historical data location on gh-pages branch
           benchmark-data-dir-path: 'dev/bench'
+
+  # Deploy GitHub Pages dashboard with historical benchmark charts.
+  # Only runs on main pushes (after benchmark data is pushed to gh-pages).
+  deploy-pages:
+    needs: benchmark
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Checkout gh-pages branch
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: '.'
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
