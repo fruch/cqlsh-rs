@@ -40,6 +40,8 @@ Skills are stored in `.github/skills/` and symlinked to `.claude/skills/` for du
 - `/rust-code-review` — Comprehensive multi-dimensional code review
 - `/rust-performance` — Performance optimization, profiling, and benchmarking
 - `/development-process` — End-to-end development workflow from plan to implementation
+- `/ci-failure-analysis` — AI-powered CI failure diagnosis and PR comment workflow
+- `/github-actions` — GitHub Actions workflow authoring, caching, matrix builds, and debugging
 
 ## Testing
 
