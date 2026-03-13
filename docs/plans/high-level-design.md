@@ -72,11 +72,16 @@ Every argument from `cqlsh --help` must be supported:
 | `--password` | `-p` | Authentication password | P1 |
 | `--connect-timeout` | | Connection timeout in seconds | P1 |
 | `--request-timeout` | | Per-request timeout in seconds | P1 |
-| `--tty` | | Force TTY mode | P3 |
+| `--tty` | `-t` | Force TTY mode | P3 |
 | `--encoding` | | Set character encoding (default: utf-8) | P2 |
-| `--cqlshrc` | | Path to cqlshrc file | P1 |
+| `--cqlshrc` | | Path to cqlshrc file (default: `~/.cassandra/cqlshrc`) | P1 |
 | `--cqlversion` | | CQL version to use | P2 |
 | `--protocol-version` | | Native protocol version | P2 |
+| `--consistency-level` | | Initial consistency level | P2 |
+| `--serial-consistency-level` | | Initial serial consistency level | P2 |
+| `--no_compact` | | Disable compact storage interpretation | P3 |
+| `--disable-history` | | Disable saving of command history | P3 |
+| `--secure-connect-bundle` | `-b` | Secure connect bundle (Astra DB) | P4 |
 | `[host]` | | Positional: contact point hostname | P1 |
 | `[port]` | | Positional: native transport port | P1 |
 
@@ -87,6 +92,7 @@ Every argument from `cqlsh --help` must be supported:
 | `CQLSH_HOST` | Default host | P1 |
 | `CQLSH_PORT` | Default port | P1 |
 | `CQLSH_NO_BUNDLED` | Skip bundled driver (N/A for Rust, accept and ignore) | P4 |
+| `CQL_HISTORY` | Override history file path (default: `~/.cassandra/cql_history`) | P2 |
 | `SSL_CERTFILE` | SSL certificate file path | P2 |
 | `SSL_VALIDATE` | Enable/disable certificate validation | P2 |
 | `CQLSH_DEFAULT_CONNECT_TIMEOUT_SECONDS` | Default connect timeout | P2 |
@@ -114,6 +120,8 @@ Every argument from `cqlsh --help` must be supported:
 | `SHOW HOST` | Show connected host | P2 | [commands.md](07-builtin-commands.md) |
 | `SHOW SESSION <uuid>` | Show tracing session details | P3 | [commands.md](07-builtin-commands.md) |
 | `CLEAR` / `CLS` | Clear the terminal screen | P2 | [commands.md](07-builtin-commands.md) |
+| `UNICODE` | Show Unicode character handling info | P4 | [commands.md](07-builtin-commands.md) |
+| `DEBUG` | Toggle debug mode (internal) | P4 | [commands.md](07-builtin-commands.md) |
 
 ### DESCRIBE Sub-Commands
 
@@ -159,8 +167,13 @@ Every argument from `cqlsh --help` must be supported:
 | `MAXINSERTERRORS` | `1000` | FROM | Max insert errors before abort |
 | `ERRFILE` | | FROM | File to log error rows |
 | `PREPAREDSTATEMENTS` | `true` | FROM | Use prepared statements |
-| `TTL` | `3600` | FROM | TTL for imported rows |
+| `TTL` | `-1` | FROM | TTL for imported rows (-1 = none) |
+| `MAXROWS` | `-1` | FROM | Max rows to import (-1 = unlimited) |
+| `SKIPROWS` | `0` | FROM | Number of initial rows to skip |
+| `SKIPCOLS` | `''` | FROM | Comma-separated columns to ignore |
 | `ENCODING` | `'utf-8'` | TO/FROM | File encoding |
+| `CONFIGFILE` | | TO/FROM | External config file path |
+| `RATEFILE` | | TO/FROM | File for progress statistics output |
 | `PAGESIZE` | `1000` | TO | Fetch page size |
 | `PAGETIMEOUT` | `10` | TO | Page fetch timeout |
 | `BEGINTOKEN` | | TO | Start token for range export |
@@ -172,13 +185,18 @@ Every argument from `cqlsh --help` must be supported:
 
 ### Configuration File: `~/.cqlshrc`
 
-Full INI-format compatibility with Python cqlsh:
+Default location: `~/.cassandra/cqlshrc` (Python cqlsh default). Full INI-format compatibility:
 
 ```ini
 [authentication]
+credentials = ~/.cassandra/credentials
 username = cassandra
 password = cassandra
 keyspace = my_keyspace
+
+[auth_provider]
+module = cassandra.auth
+classname = PlainTextAuthProvider
 
 [connection]
 hostname = 127.0.0.1
@@ -189,12 +207,20 @@ request_timeout = 10
 connect_timeout = 5
 client_timeout = 120
 
+[protocol]
+version = 4
+
 [ssl]
 certfile = /path/to/ca-cert.pem
 validate = true
 userkey = /path/to/client-key.pem
 usercert = /path/to/client-cert.pem
 version = TLSv1_2
+
+[certfiles]
+; Per-host certificate overrides
+172.31.10.22 = ~/keys/node0.cer.pem
+172.31.8.141 = ~/keys/node1.cer.pem
 
 [ui]
 color = on
@@ -206,6 +232,9 @@ max_trace_wait = 10
 encoding = utf-8
 completekey = tab
 browser =
+
+[cql]
+version = 3.4.7
 
 [csv]
 field_size_limit = 131072
@@ -234,6 +263,11 @@ maxparseerrors = -1
 maxinserterrors = 1000
 preparedstatements = true
 ttl = 3600
+
+; Table-specific sections (override per table)
+; [copy:mykeyspace.mytable]
+; [copy-to:mykeyspace.mytable]
+; [copy-from:mykeyspace.mytable]
 
 [tracing]
 max_trace_wait = 10.0
