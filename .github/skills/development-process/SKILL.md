@@ -14,7 +14,7 @@ Guide the structured development process for cqlsh-rs, from plan review through 
 ## Workflow Overview
 
 ```
-1. Review Plans  →  2. Design Tests  →  3. Implement  →  4. Test  →  5. Update Plans  →  6. Commit
+1. Review Plans  →  2. Design Tests  →  3. Implement  →  4. Test  →  5. Update Plans  →  6. Update Docs  →  7. Commit
 ```
 
 Each feature follows this deterministic workflow. Never skip steps.
@@ -159,7 +159,59 @@ or
 > **Status: DONE** — Completed [date], PR #XX
 ```
 
-## Step 6: Commit
+## Step 6: Update Documentation
+
+After implementation and plan updates, review whether user-facing documentation needs changes. This step ensures the README and any other end-user docs stay in sync with the codebase.
+
+### When to Update
+
+Update `README.md` when any of the following changed:
+
+- **New CLI flags or arguments** — Add to the usage examples
+- **New or changed environment variables** — Update the environment variables table
+- **New cqlshrc sections or keys** — Update the configuration file example
+- **New commands or features** — Add usage examples
+- **Changed defaults** — Update any documented default values
+- **New dependencies that affect build/install** — Update prerequisites
+- **New binary subcommands or modes** — Update the usage section
+- **Project structure changes** — Update the project structure tree
+
+### What NOT to Update
+
+Skip README changes for:
+
+- Internal refactoring with no user-visible effect
+- Test-only changes
+- Plan/design document updates
+- Performance improvements with no API change
+- Bug fixes that don't change documented behavior
+
+### Documentation Update Checklist
+
+- [ ] **README.md** — Usage examples, environment variables table, config sample, project structure
+- [ ] **Shell completions** — If new flags were added, verify completions still generate correctly
+- [ ] **`--help` output** — Verify it reflects the changes (clap derives this automatically, but check)
+- [ ] **Error messages** — Ensure new error paths produce helpful, documented messages
+
+### README Sections to Check
+
+| Section | Trigger for Update |
+|---------|-------------------|
+| Usage examples | New CLI flags, new modes of operation |
+| Environment variables table | New or renamed env vars |
+| Configuration file example | New cqlshrc sections or keys |
+| Prerequisites | New system dependencies |
+| Building / Installation | Build process changes |
+| Project structure | New source files or directories |
+| Running tests | New test categories or commands |
+
+### Commit Strategy for Docs
+
+- If the documentation change is small and directly tied to the feature, it **may** be included in the feature commit
+- If the documentation change is substantial (new sections, restructured content), make it a **separate commit**: `docs: update README with [feature] usage`
+- Never delay documentation to a follow-up task — update it in the same development cycle
+
+## Step 7: Commit
 
 Use the `/conventional-commit` skill or follow this format:
 
@@ -174,9 +226,10 @@ Longer description of what was done and why.
 
 ### Commit Strategy
 
-- **Separate commits** for code vs plan updates vs skill creation
+- **Separate commits** for code vs plan updates vs docs vs skill creation
 - **Code commit**: `feat(scope):` or `fix(scope):` with implementation details
 - **Plan commit**: `docs(plan):` with what was updated
+- **Docs commit**: `docs:` for README and user-facing documentation updates
 - **Skill commit**: `feat(skills):` for new or updated skills
 - Never mix code changes with documentation changes in one commit
 
