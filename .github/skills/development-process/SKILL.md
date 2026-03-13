@@ -99,9 +99,40 @@ src/
 
 ## Step 4: Test
 
+### CI Pipeline
+
+The project CI (`.github/workflows/ci.yml`) runs 4 jobs with `RUSTFLAGS="-Dwarnings"` set globally, meaning **all Rust warnings are treated as compilation errors**:
+
+| Job | Command |
+|-----|---------|
+| **fmt** | `cargo fmt --all -- --check` |
+| **clippy** | `cargo clippy --all-targets --all-features` |
+| **test** | `cargo test --all-targets --all-features` |
+| **build** | `cargo build --release` |
+
+Always run CI-equivalent checks locally before pushing:
+
+```bash
+cargo fmt --all -- --check
+RUSTFLAGS="-Dwarnings" cargo clippy --all-targets --all-features
+RUSTFLAGS="-Dwarnings" cargo test --all-targets --all-features
+RUSTFLAGS="-Dwarnings" cargo build --release
+```
+
+### Handling Ahead-of-Use Code
+
+When implementing features in phases, code defined in earlier phases may not be consumed until later phases. To avoid dead_code/unused_imports warnings under `RUSTFLAGS="-Dwarnings"`:
+
+- Use `#[allow(dead_code)]` on module declarations in `main.rs` for modules not yet wired into the main flow
+- Use `#[allow(unused_imports)]` on re-exports that later phases will consume
+- Remove these annotations once the code is actively used
+
 ### Running Tests
 
 ```bash
+# CI-equivalent (always run before pushing)
+RUSTFLAGS="-Dwarnings" cargo test --all-targets --all-features
+
 # Run all tests
 cargo test
 
@@ -118,7 +149,7 @@ cargo test -- --nocapture
 
 ### Test Quality Gates
 
-- All tests must pass before committing
+- All tests must pass with `RUSTFLAGS="-Dwarnings"` before committing
 - No `#[ignore]` without a tracking issue
 - Unit tests must cover happy path, edge cases, and error cases
 - Integration tests must verify the binary end-to-end
@@ -271,6 +302,18 @@ Longer description of what was done and why.
 | `anyhow` | Application error handling | v1 |
 | `thiserror` | Custom error types | v2 |
 | `dirs` | Home directory resolution | v6 |
+| `scylla` | CQL driver (Cassandra/ScyllaDB) | v1 (features: rustls-023, chrono-04, num-bigint-04, bigdecimal-04) |
+| `tokio` | Async runtime | v1 (features: full) |
+| `rustls` | TLS implementation | v0.23 |
+| `rustls-pemfile` | PEM file parsing for TLS | v2 |
+| `uuid` | UUID types | v1 (features: v4) |
+| `bigdecimal` | Arbitrary-precision decimals | v0.4 |
+| `num-bigint` | Arbitrary-precision integers | v0.4 |
+| `chrono` | Date/time types | v0.4 |
+| `async-trait` | Async trait support | v0.1 |
+| `futures` | Future combinators | v0.3 |
+| `tracing` | Structured logging | v0.1 |
+| `tracing-subscriber` | Log output formatting | v0.3 |
 | `assert_cmd` | CLI integration testing | v2 (dev) |
 | `predicates` | Test assertions | v3 (dev) |
 | `tempfile` | Temporary files in tests | v3 (dev) |

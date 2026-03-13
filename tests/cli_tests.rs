@@ -2,6 +2,10 @@
 //!
 //! Tests the compiled binary using assert_cmd, verifying that
 //! flags, help output, version output, and error handling work correctly.
+//!
+//! Note: Tests that trigger a connection attempt will fail with a connection
+//! error when no Cassandra/ScyllaDB cluster is available. These tests verify
+//! the connection error behavior rather than asserting success.
 
 use assert_cmd::Command;
 use predicates::prelude::*;
@@ -74,20 +78,24 @@ fn custom_cqlshrc_path() {
     writeln!(f, "hostname = 10.0.0.1").unwrap();
     writeln!(f, "port = 9999").unwrap();
 
+    // With no cluster available, the binary will fail to connect.
+    // The debug output should still show the resolved config before the error.
     cmd()
         .args(["--cqlshrc", cqlshrc.to_str().unwrap(), "--debug"])
         .assert()
-        .success()
+        .failure()
         .stderr(predicate::str::contains("10.0.0.1"))
         .stderr(predicate::str::contains("9999"));
 }
 
 #[test]
 fn debug_flag_shows_config() {
+    // With no cluster available, the binary will fail to connect,
+    // but debug output should still be printed before the error.
     cmd()
         .arg("--debug")
         .assert()
-        .success()
+        .failure()
         .stderr(predicate::str::contains("Debug: resolved host="));
 }
 
@@ -120,20 +128,22 @@ fn completions_fish() {
 
 #[test]
 fn default_host_and_port() {
+    // Connection will fail without a cluster; verify debug output and connection error
     cmd()
         .arg("--debug")
         .assert()
-        .success()
+        .failure()
         .stderr(predicate::str::contains("host=127.0.0.1"))
         .stderr(predicate::str::contains("port=9042"));
 }
 
 #[test]
 fn positional_host_override() {
+    // Connection will fail; verify resolved host appears in error output
     cmd()
         .args(["192.168.1.100", "--debug"])
         .assert()
-        .success()
+        .failure()
         .stderr(predicate::str::contains("host=192.168.1.100"));
 }
 
@@ -142,7 +152,7 @@ fn positional_host_and_port_override() {
     cmd()
         .args(["192.168.1.100", "9999", "--debug"])
         .assert()
-        .success()
+        .failure()
         .stderr(predicate::str::contains("host=192.168.1.100"))
         .stderr(predicate::str::contains("port=9999"));
 }
@@ -153,7 +163,7 @@ fn env_host_override() {
         .env("CQLSH_HOST", "env-host.example.com")
         .arg("--debug")
         .assert()
-        .success()
+        .failure()
         .stderr(predicate::str::contains("host=env-host.example.com"));
 }
 
@@ -163,7 +173,7 @@ fn env_port_override() {
         .env("CQLSH_PORT", "19042")
         .arg("--debug")
         .assert()
-        .success()
+        .failure()
         .stderr(predicate::str::contains("port=19042"));
 }
 
@@ -173,14 +183,27 @@ fn cli_host_overrides_env() {
         .env("CQLSH_HOST", "env-host")
         .args(["cli-host", "--debug"])
         .assert()
-        .success()
+        .failure()
         .stderr(predicate::str::contains("host=cli-host"));
 }
 
 #[test]
 fn nonexistent_cqlshrc_is_ok() {
+    // The cqlshrc loading succeeds (returns defaults), but connection fails
     cmd()
         .args(["--cqlshrc", "/nonexistent/path/cqlshrc", "--debug"])
         .assert()
-        .success();
+        .failure()
+        .stderr(predicate::str::contains("Connection error"));
+}
+
+#[test]
+fn connection_error_shows_host_port() {
+    // Verify the connection error message matches Python cqlsh format
+    cmd()
+        .args(["10.255.255.1", "9999", "--connect-timeout", "1"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("Connection error"))
+        .stderr(predicate::str::contains("10.255.255.1:9999"));
 }

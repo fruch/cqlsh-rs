@@ -158,6 +158,16 @@ proptest! {
 
 ## Running Tests
 
+### CI-equivalent command (always run this before pushing)
+
+The CI pipeline sets `RUSTFLAGS="-Dwarnings"` globally, which treats **all** Rust warnings as compilation errors. Always verify locally with the same flags:
+
+```bash
+RUSTFLAGS="-Dwarnings" cargo test --all-targets --all-features 2>&1
+```
+
+### Standard commands
+
 ```bash
 # All unit tests
 cargo test
@@ -182,7 +192,7 @@ cargo tarpaulin --out html
 
 After generating tests, verify:
 
-- [ ] All tests pass: `cargo test`
+- [ ] All tests pass with CI flags: `RUSTFLAGS="-Dwarnings" cargo test --all-targets --all-features`
 - [ ] No compiler warnings: `cargo test 2>&1 | grep -c warning` = 0
 - [ ] Tests are deterministic (no flaky behavior)
 - [ ] Async tests use `#[tokio::test]`

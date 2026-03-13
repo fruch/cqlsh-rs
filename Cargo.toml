@@ -19,6 +19,18 @@ configparser = "3"
 anyhow = "1"
 thiserror = "2"
 dirs = "6"
+scylla = { version = "1", features = ["rustls-023", "chrono-04", "num-bigint-04", "bigdecimal-04"] }
+tokio = { version = "1", features = ["full"] }
+rustls = "0.23"
+rustls-pemfile = "2"
+uuid = { version = "1", features = ["v4"] }
+bigdecimal = "0.4"
+num-bigint = "0.4"
+chrono = "0.4"
+tracing = "0.1"
+tracing-subscriber = "0.3"
+futures = "0.3"
+async-trait = "0.1"
 
 [lib]
 name = "cqlsh_rs"
