@@ -12,7 +12,7 @@ Automatically analyze CI failures, classify them, and post a collapsed PR commen
 
 ### Approach Comparison
 
-We evaluated three main approaches for AI-powered CI failure summaries:
+We evaluated six approaches for AI-powered CI failure summaries:
 
 #### Option A: `anthropics/claude-code-action` (Recommended)
 
@@ -60,18 +60,45 @@ Test-report-first approach: convert test output to CTRF/JUnit format, then summa
 | **Cons** | Requires test output conversion (nextest JUnit), no direct codebase context, two-tool setup |
 | **Links** | [Reporter](https://github.com/ctrf-io/github-test-reporter), [AI Reporter](https://github.com/ctrf-io/ai-test-reporter), [CTRF](https://ctrf.io/integrations) |
 
-#### Option D: GitHub Copilot Code Review (Native)
+#### Option D: `ianlintner/ai_summary_action`
 
-GitHub's built-in Copilot features for PR review and code scanning autofix.
+Multi-provider action with memory/caching — learns from past failures to improve future summaries.
 
 | Aspect | Details |
 |--------|---------|
-| **Maturity** | GA (April 2025), native GitHub feature |
-| **Auth** | GitHub Advanced Security license (Autofix), or Copilot subscription (Code Review) |
-| **Scope** | Code scanning alerts (CodeQL) + PR code review — **not CI test failure analysis** |
-| **Pros** | Zero setup, native UX, no API keys |
-| **Cons** | Does NOT analyze CI test failures — focused on static analysis and code review only. Not customizable for our failure classification needs |
-| **Links** | [Autofix Docs](https://docs.github.com/en/code-security/code-scanning/managing-code-scanning-alerts/responsible-use-autofix-code-scanning), [Code Review](https://github.blog/changelog/2026-03-11-request-copilot-code-review-from-github-cli/) |
+| **Maturity** | Very early (v0.0.4, ~3 GitHub stars) |
+| **Auth** | `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` (supports OpenAI, Azure OpenAI, GitHub Models, Anthropic) |
+| **Features** | Memory/caching (learns from past failures), custom prompts via `.github/prompts/`, Copilot-ready output, optional issue creation with labels |
+| **Pros** | Multi-provider, memory feature for recurring patterns, PR comment integration |
+| **Cons** | Extremely early stage, tiny community, limited battle-testing |
+| **Links** | [Marketplace](https://github.com/marketplace/actions/ai-workflow-failure-summary) |
+
+#### Option E: `calebevans/gha-failure-analysis`
+
+Commit-aware root cause analysis with embedding-based log preprocessing.
+
+| Aspect | Details |
+|--------|---------|
+| **Maturity** | Early but well-designed |
+| **Auth** | Supports Anthropic (Claude 3.5 Sonnet), OpenAI (GPT-4o), Gemini, Ollama (local models) |
+| **Features** | Analyzes the specific commit that triggered the failure (not current PR state), embedding-based log preprocessing reduces token costs, configurable token budgets |
+| **Pros** | Commit-aware analysis, token cost optimization via embeddings, local model support (Ollama) |
+| **Cons** | Relatively unknown, no structured JSON output |
+| **Links** | [Repo](https://github.com/calebevans/gha-failure-analysis) |
+
+#### Option F: GitHub Copilot (Native)
+
+GitHub's built-in Copilot ecosystem — Autofix, Coding Agent, CLI, and Workspace.
+
+| Aspect | Details |
+|--------|---------|
+| **Copilot Autofix** | GA since Aug 2024. Generates fix suggestions for CodeQL security vulnerabilities. Fixes 2/3 of supported alerts. **Security-only** — not general CI failures. Requires GitHub Advanced Security license. |
+| **Copilot Coding Agent** | When CI fails, create an issue with failure context and assign to Copilot — it analyzes the failure and creates a fix PR automatically. Works for dependency updates, lint errors, simple test failures. Requires Copilot subscription. |
+| **Copilot CLI** | GA Feb 2026. `gh copilot suggest` can be embedded in workflows to analyze build logs. Requires Copilot subscription. |
+| **Copilot Workspace** | Built-in repair agent that proposes fixes when tests fail. Limited to Workspace environment, not standalone. |
+| **Pros** | Zero extra API keys (if you have Copilot), native GitHub UX, Coding Agent can auto-fix |
+| **Cons** | Autofix is security-only. Coding Agent/CLI require Copilot subscription. None provide structured failure classification or collapsed PR comments with our custom taxonomy. Not customizable for our specific needs. |
+| **Links** | [Autofix Docs](https://docs.github.com/en/code-security/code-scanning/managing-code-scanning-alerts/responsible-use-autofix-code-scanning), [Code Review CLI](https://github.blog/changelog/2026-03-11-request-copilot-code-review-from-github-cli/), [Copilot CLI GA](https://github.blog/changelog/2026-02-25-github-copilot-cli-is-now-generally-available/) |
 
 ### Decision
 
@@ -85,7 +112,28 @@ GitHub's built-in Copilot features for PR review and code scanning autofix.
 - Can classify failures, not just summarize them
 - JUnit output from `cargo-nextest` provides structured test data that feeds into the prompt
 
-**Copilot is not suitable** for this use case — it handles code scanning/review but does not analyze CI test failure logs or provide failure summaries.
+**Copilot is not suitable** for this use case — Autofix is security-only, and while the Coding Agent can auto-fix simple failures, it doesn't provide structured classification, collapsed PR comments, or recurring issue detection. The community actions (Options D, E) are too early-stage to depend on.
+
+### Summary Comparison
+
+| Tool | LLM Providers | Maturity | Structured Output | Codebase Context | Cost Model |
+|------|---------------|----------|-------------------|------------------|------------|
+| **claude-code-action** | Anthropic, Bedrock, Vertex | Official/Stable | JSON schema | Full | API tokens |
+| ci-fix-coach | Anthropic | Community | Fixed A/B/C/D/E | No | API tokens |
+| ctrf-io reporters | Anthropic, OpenAI, 300+ | Mature | CTRF JSON | No | API tokens |
+| ai_summary_action | Anthropic, OpenAI, Azure | Very early | No | No | API tokens |
+| gha-failure-analysis | Anthropic, OpenAI, Gemini, Ollama | Early | No | Commit-aware | API tokens or free (Ollama) |
+| GitHub Copilot | GitHub/MS | GA | No | Partial | Subscription |
+
+### Claude API Pricing for CI (early 2026)
+
+| Model | Input (per 1M tokens) | Output (per 1M tokens) | CI Use Case |
+|-------|----------------------|------------------------|-------------|
+| Claude Haiku 4.5 | $1 | $5 | Log parsing, simple triage |
+| Claude Sonnet 4.5/4.6 | $3 | $15 | Balanced analysis (recommended default) |
+| Claude Opus 4.5/4.6 | $5+ | $25+ | Deep root cause analysis (overkill for CI) |
+
+**Cost optimization**: Prompt caching (10% of standard input price for cache hits), Batch API (50% discount for async processing — useful for nightly failure digests), configurable token budgets.
 
 ---
 
