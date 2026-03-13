@@ -21,7 +21,17 @@ Run Clippy with strict settings, analyze warnings, and apply idiomatic fixes for
 
 ## Running Clippy
 
-### Full project scan
+### CI-equivalent command (always run this before pushing)
+
+The CI pipeline sets `RUSTFLAGS="-Dwarnings"` globally, which treats **all** Rust warnings as compilation errors. Always verify locally with the same flags:
+
+```bash
+RUSTFLAGS="-Dwarnings" cargo clippy --all-targets --all-features 2>&1
+```
+
+This catches not just clippy lints but also rustc warnings (unused imports, dead code, etc.) that CI will reject.
+
+### Full project scan (development)
 
 ```bash
 cargo clippy --all-targets --all-features -- -W clippy::all -W clippy::pedantic -W clippy::nursery 2>&1
