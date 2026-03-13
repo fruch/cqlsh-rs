@@ -1,15 +1,11 @@
 //! cqlsh-rs — A Rust re-implementation of the Apache Cassandra cqlsh shell.
 
-mod cli;
-#[allow(dead_code)]
-mod config;
-mod shell_completions;
-
 use anyhow::Result;
 use clap::Parser;
 
-use cli::CliArgs;
-use config::load_config;
+use cqlsh_rs::cli::CliArgs;
+use cqlsh_rs::config::load_config;
+use cqlsh_rs::shell_completions;
 
 fn main() -> Result<()> {
     let cli = CliArgs::parse();
