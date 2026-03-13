@@ -20,7 +20,16 @@ anyhow = "1"
 thiserror = "2"
 dirs = "6"
 
+[lib]
+name = "cqlsh_rs"
+path = "src/lib.rs"
+
 [dev-dependencies]
 assert_cmd = "2"
 predicates = "3"
 tempfile = "3"
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[[bench]]
+name = "startup"
+harness = false
