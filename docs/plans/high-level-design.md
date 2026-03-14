@@ -96,6 +96,7 @@ Every argument from `cqlsh --help` must be supported:
 | `--serial-consistency-level` | | Initial serial consistency level | P2 |
 | `--no_compact` | | Disable compact storage interpretation | P3 |
 | `--disable-history` | | Disable saving of command history | P3 |
+| `--safe-mode` | | Prompt before DROP/TRUNCATE operations | P3 |
 | `--secure-connect-bundle` | `-b` | Secure connect bundle (Astra DB) | P4 |
 | `[host]` | | Positional: contact point hostname | P1 |
 | `[port]` | | Positional: native transport port | P1 |
@@ -633,6 +634,8 @@ Each area below gets its own dedicated research and execution plan document:
 | SP12 | **Cross-Platform & Release** | [`12-cross-platform-release.md`](12-cross-platform-release.md) | Multi-platform builds, packaging, distribution |
 | SP13 | **Skills Development** | [`13-skills-development.md`](13-skills-development.md) | Team skills assessment, training plans, knowledge prerequisites |
 | SP14 | **Documentation & LLM Skills** | [`14-documentation.md`](14-documentation.md) | Doc generation tooling, CI previews, LLM-oriented docs, skills marketplace publishing |
+| SP15 | **AI CI Failure Summaries** | [`15-ai-ci-failure-summaries.md`](15-ai-ci-failure-summaries.md) | AI-powered CI failure diagnosis and PR comment workflow |
+| SP16 | **Upstream PR Review** | [`16-upstream-pr-review.md`](16-upstream-pr-review.md) | Bug fixes and features from scylladb/scylla-cqlsh PRs to account for |
 
 ---
 
@@ -1003,6 +1006,8 @@ cqlsh-rs/
 | R8 | Cassandra version-specific behavior differences | Medium | Medium | Multi-version CI matrix |
 | R9 | Binary size too large | Low | Low | Feature flags, LTO, strip symbols |
 | R10 | Async runtime overhead for simple operations | Low | Low | Profile early, consider sync fallback for simple paths |
+| R11 | Parser inherits Python cqlsh bugs (comment-in-string, O(n²) batch) | Medium | High | Build context-aware lexer from scratch; see [SP16](16-upstream-pr-review.md) for known bugs |
+| R12 | Upstream scylla-cqlsh adds features (safe mode) before cqlsh-rs ships | Medium | Medium | Track upstream PRs; [SP16](16-upstream-pr-review.md) documents open PRs |
 
 ---
 
