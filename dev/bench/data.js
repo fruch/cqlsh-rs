@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773610425238,
+  "lastUpdate": 1773707034209,
   "repoUrl": "https://github.com/fruch/cqlsh-rs",
   "entries": {
     "Benchmark": [
@@ -809,6 +809,168 @@ window.BENCHMARK_DATA = {
             "name": "end_to_end_startup/full",
             "value": 98712,
             "range": "± 612",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fruch@scylladb.com",
+            "name": "Israel Fruchter",
+            "username": "fruch"
+          },
+          "committer": {
+            "email": "israel.fruchter@gmail.com",
+            "name": "Israel Fruchter",
+            "username": "fruch"
+          },
+          "distinct": true,
+          "id": "67e0952d36b31a991c950a5866db1fc33734f9a8",
+          "message": "fix: address all 9 bugs from PR22 manual testing\n\nBUG-1: DESCRIBE TABLES lists all keyspaces with grouped tables\nBUG-2: Tabular output with proper column widths and separators\nBUG-3: EXPAND ON/OFF with vertical format matching Python cqlsh\nBUG-4: SOURCE command dispatches shell commands correctly\nBUG-5: Multi-line paste splits lines before processing\nBUG-6: Error messages use category-aware formatting (SyntaxError, etc.)\nBUG-7: Inline comment after semicolon no longer enters continuation\nBUG-8: Bare ;; no longer enters continuation prompt loop\nBUG-9: Banner shows ScyllaDB version when connected to ScyllaDB\n\nAdds error module, ScyllaDB version detection in driver/session,\nand rewrites REPL output formatting. 35 new unit tests.\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-03-17T02:16:48+02:00",
+          "tree_id": "6a822422f74569459c960e0c57ec3d34d66d51f1",
+          "url": "https://github.com/fruch/cqlsh-rs/commit/67e0952d36b31a991c950a5866db1fc33734f9a8"
+        },
+        "date": 1773707033803,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "cli_parse_args/no_args",
+            "value": 16595,
+            "range": "± 87",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cli_parse_args/host_only",
+            "value": 18884,
+            "range": "± 92",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cli_parse_args/host_and_port",
+            "value": 19898,
+            "range": "± 187",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cli_parse_args/execute_mode",
+            "value": 19100,
+            "range": "± 56",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cli_parse_args/file_mode",
+            "value": 19536,
+            "range": "± 142",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cli_parse_args/full_connection",
+            "value": 37747,
+            "range": "± 330",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cli_validate/valid_full",
+            "value": 2,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cli_validate/valid_minimal",
+            "value": 2,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cqlshrc_parse/empty",
+            "value": 2782,
+            "range": "± 8",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cqlshrc_parse/minimal",
+            "value": 6157,
+            "range": "± 16",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cqlshrc_parse/full",
+            "value": 43860,
+            "range": "± 271",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cqlshrc_parse_scaling/certfiles/0",
+            "value": 5382,
+            "range": "± 83",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cqlshrc_parse_scaling/certfiles/10",
+            "value": 12527,
+            "range": "± 144",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cqlshrc_parse_scaling/certfiles/50",
+            "value": 51002,
+            "range": "± 260",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cqlshrc_parse_scaling/certfiles/100",
+            "value": 95188,
+            "range": "± 266",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "config_merge/all_defaults",
+            "value": 559,
+            "range": "± 1",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "config_merge/cli_overrides_only",
+            "value": 612,
+            "range": "± 1",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "config_merge/full_merge",
+            "value": 1154,
+            "range": "± 34",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cqlshrc_load_file/nonexistent_file",
+            "value": 1326,
+            "range": "± 6",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cqlshrc_load_file/minimal_file",
+            "value": 14785,
+            "range": "± 43",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cqlshrc_load_file/full_file",
+            "value": 52796,
+            "range": "± 309",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "end_to_end_startup/minimal",
+            "value": 22240,
+            "range": "± 206",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "end_to_end_startup/full",
+            "value": 98995,
+            "range": "± 621",
             "unit": "ns/iter"
           }
         ]
