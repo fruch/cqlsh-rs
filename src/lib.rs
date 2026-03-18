@@ -9,4 +9,5 @@ pub mod formatter;
 pub mod parser;
 pub mod repl;
 pub mod session;
+pub mod schema_cache;
 pub mod shell_completions;
