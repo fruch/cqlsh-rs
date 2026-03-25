@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774474911827,
+  "lastUpdate": 1774475978281,
   "repoUrl": "https://github.com/fruch/cqlsh-rs",
   "entries": {
     "Benchmark": [
@@ -1295,6 +1295,168 @@ window.BENCHMARK_DATA = {
             "name": "end_to_end_startup/full",
             "value": 90139,
             "range": "± 269",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "noreply@anthropic.com",
+            "name": "Claude",
+            "username": "claude"
+          },
+          "committer": {
+            "email": "israel.fruchter@gmail.com",
+            "name": "Israel Fruchter",
+            "username": "fruch"
+          },
+          "distinct": true,
+          "id": "e9719b363afef84fff2aa5a2e160d56c7e7b6584",
+          "message": "docs(progress): update progress tracking and integrate into development workflow\n\n- Update progress.json to reflect reality: Phase 1 (15/15), Phase 2\n  (22/22), Phase 3 (21/21) all completed — was stuck at Phase 1 (5/15)\n- Fix progress.yml GitHub Action: trigger on push to main instead of\n  PR merge, since this repo uses direct pushes (all PRs show merged=false)\n- Add Step 5b to development-process skill: mandatory progress.json\n  update after completing tasks, with detailed instructions\n- Add progress scope and tracking reminder to conventional-commit skill\n- Add progress tracking section to CLAUDE.md as a key convention\n- Add progress.json reminder to create-implementation-plan skill\n- Regenerate progress-roadmap.svg (now shows 54% complete)\n\nhttps://claude.ai/code/session_01Sks9pNgaYb8jBb8oNGbfee",
+          "timestamp": "2026-03-25T23:51:45+02:00",
+          "tree_id": "25297d5804f6978a2cd40a53813ae422b025b29f",
+          "url": "https://github.com/fruch/cqlsh-rs/commit/e9719b363afef84fff2aa5a2e160d56c7e7b6584"
+        },
+        "date": 1774475977857,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "cli_parse_args/no_args",
+            "value": 16763,
+            "range": "± 361",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cli_parse_args/host_only",
+            "value": 18613,
+            "range": "± 433",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cli_parse_args/host_and_port",
+            "value": 20973,
+            "range": "± 359",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cli_parse_args/execute_mode",
+            "value": 19093,
+            "range": "± 52",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cli_parse_args/file_mode",
+            "value": 19074,
+            "range": "± 203",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cli_parse_args/full_connection",
+            "value": 35942,
+            "range": "± 314",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cli_validate/valid_full",
+            "value": 2,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cli_validate/valid_minimal",
+            "value": 2,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cqlshrc_parse/empty",
+            "value": 2859,
+            "range": "± 10",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cqlshrc_parse/minimal",
+            "value": 6317,
+            "range": "± 113",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cqlshrc_parse/full",
+            "value": 42629,
+            "range": "± 141",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cqlshrc_parse_scaling/certfiles/0",
+            "value": 5657,
+            "range": "± 29",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cqlshrc_parse_scaling/certfiles/10",
+            "value": 12494,
+            "range": "± 33",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cqlshrc_parse_scaling/certfiles/50",
+            "value": 50710,
+            "range": "± 839",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cqlshrc_parse_scaling/certfiles/100",
+            "value": 94372,
+            "range": "± 543",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "config_merge/all_defaults",
+            "value": 604,
+            "range": "± 5",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "config_merge/cli_overrides_only",
+            "value": 659,
+            "range": "± 3",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "config_merge/full_merge",
+            "value": 1211,
+            "range": "± 9",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cqlshrc_load_file/nonexistent_file",
+            "value": 1467,
+            "range": "± 45",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cqlshrc_load_file/minimal_file",
+            "value": 16316,
+            "range": "± 231",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cqlshrc_load_file/full_file",
+            "value": 53178,
+            "range": "± 312",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "end_to_end_startup/minimal",
+            "value": 22173,
+            "range": "± 134",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "end_to_end_startup/full",
+            "value": 93031,
+            "range": "± 401",
             "unit": "ns/iter"
           }
         ]
