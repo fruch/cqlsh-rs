@@ -56,3 +56,15 @@ path = "tests/integration/main.rs"
 [[bench]]
 name = "startup"
 harness = false
+
+[[bench]]
+name = "parser"
+harness = false
+
+[[bench]]
+name = "format"
+harness = false
+
+[[bench]]
+name = "completion"
+harness = false
