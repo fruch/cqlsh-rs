@@ -32,12 +32,16 @@ Create a comprehensive benchmark suite that measures cqlsh-rs performance across
 ### Implemented
 
 - [x] **Startup micro-benchmarks** — `benches/startup.rs` with criterion 0.5
+- [x] **Parser micro-benchmarks** — `benches/parser.rs` with criterion 0.5
+- [x] **Formatter micro-benchmarks** — `benches/format.rs` with criterion 0.5
+- [x] **Completion micro-benchmarks** — `benches/completion.rs` with criterion 0.5
+- [x] **Python internal benchmarks** — `benchmarks/python_cqlsh/benchmarks/bench_internals.py` for parser/format comparison
 - [x] **Library crate** — `src/lib.rs` exposes modules for benchmark access
 - [x] **CI workflow** — `.github/workflows/bench.yml` with conditional execution
 - [x] **GitHub Pages deployment** — Historical dashboard at `https://fruch.github.io/cqlsh-rs/dev/bench/`
 - [x] **Artifact collection** — Criterion HTML reports + raw output retained 90 days
 
-### Baseline Results (initial measurements)
+### Baseline Results — Startup (SP1)
 
 | Benchmark | Result |
 |-----------|--------|
@@ -54,6 +58,103 @@ Create a comprehensive benchmark suite that measures cqlsh-rs performance across
 | `end_to_end_startup/full` | ~95 µs |
 
 > End-to-end startup is well under the 50 ms target (vs Python cqlsh ~800 ms).
+
+### Baseline Results — Statement Parser (SP4)
+
+| Benchmark | Result |
+|-----------|--------|
+| `parse_statement/simple_select` | ~472 ns |
+| `parse_statement/simple_insert` | ~1.1 µs |
+| `parse_statement/complex_select` | ~1.8 µs |
+| `parse_statement/string_literals` | ~1.1 µs |
+| `parse_statement/dollar_quoted` | ~1.2 µs |
+| `parse_statement/nested_comments` | ~838 ns |
+| `parse_multiline/6_lines` | ~4.6 µs |
+| `parse_multiline/with_comments` | ~1.8 µs |
+| `parse_batch/5_statements` | ~5.5 µs |
+| `parse_batch/insert_statements/10` | ~8.9 µs |
+| `parse_batch/insert_statements/50` | ~48.9 µs |
+| `parse_batch/insert_statements/100` | ~96.8 µs |
+| `parse_batch/insert_statements/500` | ~444 µs |
+| `classify_input/shell_command` | ~89 ns |
+| `classify_input/cql_statement` | ~67 ns |
+| `classify_input/empty` | ~5.4 ns |
+| `classify_input/use_command` | ~62 ns |
+
+> Parser performance is excellent — simple statement parsing in <500 ns, batch parsing
+> scales linearly (~0.9 µs/statement). The incremental parser (O(n) via scan_offset)
+> shows near-zero overhead for multi-line statements. Classification is effectively free
+> at 5–89 ns.
+
+### Baseline Results — Output Formatting (SP6 + SP9)
+
+| Benchmark | Result |
+|-----------|--------|
+| `format_table/rows/10` | ~78.8 µs |
+| `format_table/rows/100` | ~773 µs |
+| `format_table/rows/1000` | ~7.8 ms |
+| `format_table_colored/rows/10` | ~187 µs |
+| `format_table_colored/rows/100` | ~1.7 ms |
+| `format_expanded/rows/10` | ~10 µs |
+| `format_expanded/rows/100` | ~98.6 µs |
+| `format_each_type/all_types_tabular` | ~58.4 µs |
+| `format_each_type/all_types_expanded` | ~4.4 µs |
+| `format_edge_cases/empty_result` | ~7.8 ns |
+| `format_edge_cases/zero_rows` | ~26.4 ns |
+| `format_edge_cases/wide_20col_10rows` | ~256 µs |
+
+> **Target met:** Format 100 rows (table) = ~773 µs, well under the 1 ms target.
+> Color adds ~2.2x overhead (comfy-table + ANSI escapes). Expanded format is ~7.8x faster
+> than tabular (no table layout engine). Scaling is linear: 10→100→1000 rows = ~8x→~10x.
+
+#### CqlValue Display Performance
+
+| Type | `to_string()` Time |
+|------|-------------------|
+| `text` | ~48 ns |
+| `int` | ~54 ns |
+| `bigint` | ~63 ns |
+| `boolean` | ~33 ns |
+| `double` | ~154 ns |
+| `uuid` | ~40 ns |
+| `blob` | ~102 ns |
+| `null` | ~29 ns |
+| `list<int>` (3 elements) | ~121 ns |
+| `map<text,int>` (2 entries) | ~179 ns |
+
+> Individual value formatting is sub-200 ns for all types. Collection types scale
+> linearly with element count. These results confirm that the formatting bottleneck
+> is comfy-table layout, not value serialization.
+
+### Baseline Results — Tab Completion (SP5)
+
+| Benchmark | Result |
+|-----------|--------|
+| `complete_keyword/empty_input` | ~10.3 µs |
+| `complete_keyword/prefix_S` | ~3.7 µs |
+| `complete_keyword/prefix_SEL` | ~2.5 µs |
+| `complete_keyword/prefix_SELECT` | ~2.7 µs |
+| `complete_keyword/clause_after_select` | ~37.4 µs |
+| `complete_context/detect/empty` | ~12.3 µs |
+| `complete_context/detect/keyword_start` | ~2.7 µs |
+| `complete_context/detect/after_from` | ~1.0 µs |
+| `complete_context/detect/consistency` | ~4.1 µs |
+| `complete_context/detect/describe` | ~4.8 µs |
+| `complete_context/detect/use_keyspace` | ~693 ns |
+| `complete_context/detect/source_file` | ~18.0 µs |
+| `complete_context/detect/where_clause` | ~1.3 µs |
+| `complete_consistency/all_levels` | ~3.6 µs |
+| `complete_consistency/prefix_L` | ~1.1 µs |
+| `complete_consistency/serial` | ~2.8 µs |
+| `complete_describe/sub_commands` | ~3.4 µs |
+| `complete_describe/prefix_K` | ~864 ns |
+| `complete_describe/desc_shorthand` | ~2.9 µs |
+
+> **Target met:** All completion operations complete in <50 µs, far under the 50 ms target.
+> Even the worst case (clause completion after SELECT, which scans all clause keywords)
+> takes only ~37 µs. These measurements are for keyword-only completions with an empty
+> schema cache; schema-backed completions (table/column) will be measured once SP2
+> (driver & connection) enables live database integration testing.
 
 ---
 
@@ -86,10 +187,10 @@ Create a comprehensive benchmark suite that measures cqlsh-rs performance across
 | SP | Component | Benchmarks Unlocked | Benchmark File |
 |----|-----------|---------------------|----------------|
 | **SP1** ✅ | CLI & Config | `cli_parse_args`, `cqlshrc_parse`, `config_merge`, `end_to_end_startup` | `startup.rs` ✅ |
-| **SP4** | Statement Parser | `parse_statement`, `parse_multiline` | `parser.rs` |
+| **SP4** ✅ | Statement Parser | `parse_statement`, `parse_multiline`, `parse_batch`, `classify_input` | `parser.rs` ✅ |
+| **SP6 + SP9** ✅ | Output Formatting + CQL Types | `format_table_{10,100,1000}`, `format_expanded`, `format_each_type`, `cqlvalue_display` | `format.rs` ✅ |
+| **SP5** ✅ | Tab Completion | `complete_keyword`, `complete_context`, `complete_consistency`, `complete_describe` | `completion.rs` ✅ |
 | **SP2** | Driver & Connection | Macro-benchmarks: connect + query roundtrip (hyperfine) | `macro/` |
-| **SP6 + SP9** | Output Formatting + CQL Types | `format_table_{10,100,1000}`, `format_json_100`, `format_csv_100`, `format_each_type` | `format.rs` |
-| **SP5** | Tab Completion | `complete_keyword`, `complete_table`, `complete_column` | `completion.rs` |
 | **SP8** | COPY TO/FROM | COPY throughput macro-benchmarks (hyperfine), COPY memory benchmarks | `macro/` |
 
 > **Action:** After completing each SP above, immediately implement its
@@ -97,21 +198,43 @@ Create a comprehensive benchmark suite that measures cqlsh-rs performance across
 > performance regressions are caught early and baselines are established
 > while the code is fresh.
 
+##### Implemented — `parser.rs`
+
+| Benchmark Group | Benchmarks | What it Measures |
+|-----------------|------------|-----------------|
+| `parse_statement` | `simple_select`, `simple_insert`, `complex_select`, `string_literals`, `dollar_quoted`, `nested_comments` | Single-statement parsing across input patterns |
+| `parse_multiline` | `6_lines`, `with_comments` | Incremental multi-line feed_line parsing |
+| `parse_batch` | `5_statements`, `insert_statements/{10,50,100,500}` | Batch parsing scaling with statement count |
+| `classify_input` | `shell_command`, `cql_statement`, `empty`, `use_command` | Input classification latency |
+
+##### Implemented — `format.rs`
+
+| Benchmark Group | Benchmarks | What it Measures |
+|-----------------|------------|-----------------|
+| `format_table` | `rows/10`, `rows/100`, `rows/1000` | Tabular formatting at various result set sizes |
+| `format_table_colored` | `rows/10`, `rows/100` | Tabular formatting with ANSI color overhead |
+| `format_expanded` | `rows/10`, `rows/100` | Expanded (vertical) formatting |
+| `format_each_type` | `all_types_tabular`, `all_types_expanded` | Formatting across all 14 CQL types |
+| `cqlvalue_display` | `text`, `int`, `bigint`, `boolean`, `double`, `uuid`, `blob`, `null`, `list`, `map` | Individual CqlValue::Display performance |
+| `format_edge_cases` | `empty_result`, `zero_rows`, `wide_20col_10rows` | Edge case formatting |
+
+##### Implemented — `completion.rs`
+
+| Benchmark Group | Benchmarks | What it Measures |
+|-----------------|------------|-----------------|
+| `complete_keyword` | `empty_input`, `prefix_S`, `prefix_SEL`, `prefix_SELECT`, `clause_after_select` | Keyword completion latency with varying prefix lengths |
+| `complete_context` | `detect/{empty,keyword_start,after_from,consistency,describe,use_keyspace,source_file,where_clause}` | Context detection across 8 input patterns |
+| `complete_consistency` | `all_levels`, `prefix_L`, `serial` | Consistency level completion |
+| `complete_describe` | `sub_commands`, `prefix_K`, `desc_shorthand` | DESCRIBE sub-command completion |
+
 ##### Planned — Future phases
 
 | Benchmark | File | What it Measures |
 |-----------|------|-----------------|
-| `format_table_10` | `format.rs` | Format 10-row result as table |
-| `format_table_100` | `format.rs` | Format 100-row result as table |
-| `format_table_1000` | `format.rs` | Format 1000-row result as table |
-| `format_json_100` | `format.rs` | Format 100 rows as JSON |
-| `format_csv_100` | `format.rs` | Format 100 rows as CSV |
-| `format_each_type` | `format.rs` | Format each CQL type individually |
-| `parse_statement` | `parser.rs` | Parse single CQL statement |
-| `parse_multiline` | `parser.rs` | Parse multi-line CQL statement |
-| `complete_keyword` | `completion.rs` | Keyword completion latency |
-| `complete_table` | `completion.rs` | Table name completion with 100 tables |
-| `complete_column` | `completion.rs` | Column completion with 50 columns |
+| `format_json_100` | `format.rs` | Format 100 rows as JSON (when JSON output is implemented) |
+| `format_csv_100` | `format.rs` | Format 100 rows as CSV (when CSV output is implemented) |
+| `complete_table` | `completion.rs` | Table name completion with 100 tables (requires live DB) |
+| `complete_column` | `completion.rs` | Column completion with 50 columns (requires live DB) |
 
 #### Macro-benchmarks (hyperfine)
 
@@ -157,7 +280,7 @@ The workflow consists of two jobs:
 1. **`benchmark`** — Runs on all triggers:
    - Installs stable Rust toolchain (dtolnay/rust-toolchain)
    - Caches cargo registry + build artifacts for fast reruns
-   - Runs `cargo bench --bench startup -- --output-format bencher`
+   - Runs `cargo bench -- --output-format bencher` (all bench targets: startup, parser, format, completion)
    - Uploads criterion HTML report as artifact (90-day retention)
    - Uploads raw bencher output as artifact (90-day retention)
    - Pushes results to `gh-pages` branch via `benchmark-action/github-action-benchmark@v1`
@@ -244,7 +367,7 @@ Three layers provide benchmark visibility at different levels:
 ### Acceptance Criteria
 
 - [x] Startup micro-benchmarks run with statistical significance (criterion)
-- [ ] All micro-benchmarks run with statistical significance (format, parser, completion)
+- [x] All micro-benchmarks run with statistical significance (format, parser, completion)
 - [ ] Macro-benchmarks show >2x improvement over Python cqlsh in startup
 - [ ] COPY performance is comparable or better than Python cqlsh
 - [ ] Memory usage is lower than Python cqlsh

@@ -52,7 +52,7 @@ jobs:
             ${{ runner.os }}-cargo-bench-
 
       - name: Run benchmarks
-        run: cargo bench --bench startup -- --output-format bencher | tee output.txt
+        run: cargo bench -- --output-format bencher | tee output.txt
 
       - name: Generate benchmark summary
         run: python3 scripts/format_bench_summary.py < output.txt >> "$GITHUB_STEP_SUMMARY"
