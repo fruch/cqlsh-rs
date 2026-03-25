@@ -7,6 +7,12 @@
 //! - DESCRIBE TABLES
 //! - DESCRIBE TABLE <name>
 //! - DESCRIBE SCHEMA
+//! - DESCRIBE FULL SCHEMA
+//! - DESCRIBE INDEX <name>
+//! - DESCRIBE MATERIALIZED VIEW <name>
+//! - DESCRIBE TYPE <name> / DESCRIBE TYPES
+//! - DESCRIBE FUNCTION <name> / DESCRIBE FUNCTIONS
+//! - DESCRIBE AGGREGATE <name> / DESCRIBE AGGREGATES
 
 use std::io::Write;
 
@@ -25,7 +31,7 @@ pub async fn execute(session: &CqlSession, args: &str, writer: &mut dyn Write) -
     if args.is_empty() {
         writeln!(
             writer,
-            "Usage: DESCRIBE [CLUSTER | KEYSPACES | KEYSPACE [name] | TABLES | TABLE <name> | SCHEMA]"
+            "Usage: DESCRIBE [CLUSTER | KEYSPACES | KEYSPACE [name] | TABLES | TABLE <name> | SCHEMA | FULL SCHEMA | INDEX <name> | MATERIALIZED VIEW <name> | TYPES | TYPE <name> | FUNCTIONS | FUNCTION <name> | AGGREGATES | AGGREGATE <name>]"
         )?;
         return Ok(());
     }
@@ -36,6 +42,8 @@ pub async fn execute(session: &CqlSession, args: &str, writer: &mut dyn Write) -
         describe_keyspaces(session, writer).await
     } else if upper == "TABLES" {
         describe_tables(session, writer).await
+    } else if upper == "FULL SCHEMA" {
+        describe_full_schema(session, writer).await
     } else if upper == "SCHEMA" {
         describe_schema(session, writer).await
     } else if upper == "KEYSPACE" {
@@ -54,6 +62,47 @@ pub async fn execute(session: &CqlSession, args: &str, writer: &mut dyn Write) -
         let table_spec = args["TABLE ".len()..].trim();
         let table_spec = strip_quotes(table_spec);
         describe_table(session, table_spec, writer).await
+    } else if upper == "INDEX" {
+        writeln!(writer, "DESCRIBE INDEX requires an index name.")?;
+        Ok(())
+    } else if upper.starts_with("INDEX ") {
+        let index_spec = args["INDEX ".len()..].trim();
+        let index_spec = strip_quotes(index_spec);
+        describe_index(session, index_spec, writer).await
+    } else if upper == "MATERIALIZED VIEW" {
+        writeln!(writer, "DESCRIBE MATERIALIZED VIEW requires a view name.")?;
+        Ok(())
+    } else if upper.starts_with("MATERIALIZED VIEW ") {
+        let view_spec = args["MATERIALIZED VIEW ".len()..].trim();
+        let view_spec = strip_quotes(view_spec);
+        describe_materialized_view(session, view_spec, writer).await
+    } else if upper == "TYPES" {
+        describe_types(session, writer).await
+    } else if upper == "TYPE" {
+        writeln!(writer, "DESCRIBE TYPE requires a type name.")?;
+        Ok(())
+    } else if upper.starts_with("TYPE ") {
+        let type_spec = args["TYPE ".len()..].trim();
+        let type_spec = strip_quotes(type_spec);
+        describe_type(session, type_spec, writer).await
+    } else if upper == "FUNCTIONS" {
+        describe_functions(session, writer).await
+    } else if upper == "FUNCTION" {
+        writeln!(writer, "DESCRIBE FUNCTION requires a function name.")?;
+        Ok(())
+    } else if upper.starts_with("FUNCTION ") {
+        let func_spec = args["FUNCTION ".len()..].trim();
+        let func_spec = strip_quotes(func_spec);
+        describe_function(session, func_spec, writer).await
+    } else if upper == "AGGREGATES" {
+        describe_aggregates(session, writer).await
+    } else if upper == "AGGREGATE" {
+        writeln!(writer, "DESCRIBE AGGREGATE requires an aggregate name.")?;
+        Ok(())
+    } else if upper.starts_with("AGGREGATE ") {
+        let agg_spec = args["AGGREGATE ".len()..].trim();
+        let agg_spec = strip_quotes(agg_spec);
+        describe_aggregate(session, agg_spec, writer).await
     } else {
         // Try to guess: could be a keyspace name, table name, or keyspace.table
         // Check if it matches a keyspace first, then a table in current keyspace
@@ -249,21 +298,39 @@ async fn describe_table(
 
 /// DESCRIBE SCHEMA — show CREATE statements for all user keyspaces and their tables.
 async fn describe_schema(session: &CqlSession, writer: &mut dyn Write) -> Result<()> {
+    describe_schema_inner(session, writer, false).await
+}
+
+/// DESCRIBE FULL SCHEMA — show CREATE statements for ALL keyspaces (including system).
+async fn describe_full_schema(session: &CqlSession, writer: &mut dyn Write) -> Result<()> {
+    describe_schema_inner(session, writer, true).await
+}
+
+/// Shared implementation for DESCRIBE SCHEMA and DESCRIBE FULL SCHEMA.
+async fn describe_schema_inner(
+    session: &CqlSession,
+    writer: &mut dyn Write,
+    include_system: bool,
+) -> Result<()> {
     let keyspaces = session.get_keyspaces().await?;
 
-    let user_keyspaces: Vec<_> = keyspaces
-        .iter()
-        .filter(|ks| !is_system_keyspace(&ks.name))
-        .collect();
+    let filtered_keyspaces: Vec<_> = if include_system {
+        keyspaces.iter().collect()
+    } else {
+        keyspaces
+            .iter()
+            .filter(|ks| !is_system_keyspace(&ks.name))
+            .collect()
+    };
 
-    if user_keyspaces.is_empty() {
+    if filtered_keyspaces.is_empty() {
         writeln!(writer)?;
         writeln!(writer, "No user-defined keyspaces found.")?;
         writeln!(writer)?;
         return Ok(());
     }
 
-    for ks in user_keyspaces {
+    for ks in filtered_keyspaces {
         // Print DESCRIBE KEYSPACE
         describe_keyspace(session, Some(&ks.name), writer).await?;
 
@@ -275,6 +342,547 @@ async fn describe_schema(session: &CqlSession, writer: &mut dyn Write) -> Result
         }
     }
 
+    writeln!(writer)?;
+    Ok(())
+}
+
+/// DESCRIBE INDEX <name> — show CREATE INDEX statement.
+async fn describe_index(
+    session: &CqlSession,
+    index_spec: &str,
+    writer: &mut dyn Write,
+) -> Result<()> {
+    let (keyspace, index_name) = resolve_qualified_name(session, index_spec, writer)?;
+    let keyspace = match keyspace {
+        Some(ks) => ks,
+        None => return Ok(()),
+    };
+
+    let query = format!(
+        "SELECT index_name, table_name, kind, options FROM system_schema.indexes WHERE keyspace_name = '{}' AND index_name = '{}'",
+        keyspace.replace('\'', "''"),
+        index_name.replace('\'', "''")
+    );
+    let result = session.execute_query(&query).await?;
+
+    if result.rows.is_empty() {
+        writeln!(writer, "Index '{keyspace}.{index_name}' not found.")?;
+        return Ok(());
+    }
+
+    let row = &result.rows[0];
+    let idx_name = row
+        .get_by_name("index_name", &result.columns)
+        .map(|v| v.to_string())
+        .unwrap_or_default();
+    let table_name = row
+        .get_by_name("table_name", &result.columns)
+        .map(|v| v.to_string())
+        .unwrap_or_default();
+    let options = row
+        .get_by_name("options", &result.columns)
+        .map(|v| v.to_string())
+        .unwrap_or_default();
+
+    // Extract target column from options map
+    // The options map contains 'target' key with the indexed column
+    let target = extract_map_value(&options, "target").unwrap_or_else(|| "unknown".to_string());
+
+    writeln!(writer)?;
+    writeln!(
+        writer,
+        "CREATE INDEX {} ON {}.{} ({});",
+        quote_if_needed(&idx_name),
+        quote_if_needed(&keyspace),
+        quote_if_needed(&table_name),
+        target
+    )?;
+    writeln!(writer)?;
+    Ok(())
+}
+
+/// DESCRIBE MATERIALIZED VIEW <name> — show CREATE MATERIALIZED VIEW statement.
+async fn describe_materialized_view(
+    session: &CqlSession,
+    view_spec: &str,
+    writer: &mut dyn Write,
+) -> Result<()> {
+    let (keyspace, view_name) = resolve_qualified_name(session, view_spec, writer)?;
+    let keyspace = match keyspace {
+        Some(ks) => ks,
+        None => return Ok(()),
+    };
+
+    let query = format!(
+        "SELECT view_name, base_table_name, where_clause, include_all_columns FROM system_schema.views WHERE keyspace_name = '{}' AND view_name = '{}'",
+        keyspace.replace('\'', "''"),
+        view_name.replace('\'', "''")
+    );
+    let result = session.execute_query(&query).await?;
+
+    if result.rows.is_empty() {
+        writeln!(
+            writer,
+            "Materialized view '{keyspace}.{view_name}' not found."
+        )?;
+        return Ok(());
+    }
+
+    let row = &result.rows[0];
+    let mv_name = row
+        .get_by_name("view_name", &result.columns)
+        .map(|v| v.to_string())
+        .unwrap_or_default();
+    let base_table = row
+        .get_by_name("base_table_name", &result.columns)
+        .map(|v| v.to_string())
+        .unwrap_or_default();
+    let where_clause = row
+        .get_by_name("where_clause", &result.columns)
+        .map(|v| v.to_string())
+        .unwrap_or_else(|| "IS NOT NULL".to_string());
+    let include_all = row
+        .get_by_name("include_all_columns", &result.columns)
+        .map(|v| v.to_string() == "True")
+        .unwrap_or(false);
+
+    // Fetch columns for the view
+    let col_query = format!(
+        "SELECT column_name, type, kind, position, clustering_order FROM system_schema.columns WHERE keyspace_name = '{}' AND table_name = '{}' ORDER BY position",
+        keyspace.replace('\'', "''"),
+        mv_name.replace('\'', "''")
+    );
+    let col_result = session.execute_query(&col_query).await?;
+
+    let mut select_columns = Vec::new();
+    let mut partition_keys: Vec<(i32, String)> = Vec::new();
+    let mut clustering_keys: Vec<(i32, String, String)> = Vec::new();
+
+    for col_row in &col_result.rows {
+        let col_name = col_row
+            .get_by_name("column_name", &col_result.columns)
+            .map(|v| v.to_string())
+            .unwrap_or_default();
+        let kind = col_row
+            .get_by_name("kind", &col_result.columns)
+            .map(|v| v.to_string())
+            .unwrap_or_default();
+        let position = col_row
+            .get_by_name("position", &col_result.columns)
+            .and_then(|v| v.to_string().parse::<i32>().ok())
+            .unwrap_or(0);
+        let clustering_order = col_row
+            .get_by_name("clustering_order", &col_result.columns)
+            .map(|v| v.to_string())
+            .unwrap_or_else(|| "none".to_string());
+
+        select_columns.push(col_name.clone());
+
+        if kind == "partition_key" {
+            partition_keys.push((position, col_name));
+        } else if kind == "clustering" {
+            clustering_keys.push((position, col_name, clustering_order));
+        }
+    }
+
+    partition_keys.sort_by_key(|k| k.0);
+    clustering_keys.sort_by_key(|k| k.0);
+
+    // Build CREATE MATERIALIZED VIEW statement
+    writeln!(writer)?;
+    writeln!(
+        writer,
+        "CREATE MATERIALIZED VIEW {}.{} AS",
+        quote_if_needed(&keyspace),
+        quote_if_needed(&mv_name)
+    )?;
+
+    let columns_str = if include_all {
+        "*".to_string()
+    } else {
+        select_columns
+            .iter()
+            .map(|c| quote_if_needed(c))
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    writeln!(
+        writer,
+        "    SELECT {}",
+        columns_str
+    )?;
+    writeln!(
+        writer,
+        "    FROM {}.{}",
+        quote_if_needed(&keyspace),
+        quote_if_needed(&base_table)
+    )?;
+    writeln!(writer, "    WHERE {where_clause}")?;
+
+    // PRIMARY KEY
+    let pk_str = if partition_keys.len() == 1 {
+        quote_if_needed(&partition_keys[0].1)
+    } else {
+        format!(
+            "({})",
+            partition_keys
+                .iter()
+                .map(|k| quote_if_needed(&k.1))
+                .collect::<Vec<_>>()
+                .join(", ")
+        )
+    };
+
+    if clustering_keys.is_empty() {
+        writeln!(writer, "    PRIMARY KEY ({pk_str})")?;
+    } else {
+        let ck_str = clustering_keys
+            .iter()
+            .map(|k| quote_if_needed(&k.1))
+            .collect::<Vec<_>>()
+            .join(", ");
+        writeln!(writer, "    PRIMARY KEY ({pk_str}, {ck_str})")?;
+    }
+
+    // WITH clustering order if any clustering keys have DESC order
+    let has_non_default_order = clustering_keys
+        .iter()
+        .any(|(_, _, order)| order.to_uppercase() == "DESC");
+    if has_non_default_order {
+        let order_str = clustering_keys
+            .iter()
+            .map(|(_, name, order)| {
+                format!(
+                    "{} {}",
+                    quote_if_needed(name),
+                    order.to_uppercase()
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(", ");
+        writeln!(
+            writer,
+            "    WITH CLUSTERING ORDER BY ({order_str});"
+        )?;
+    } else {
+        writeln!(writer, ";")?;
+    }
+
+    writeln!(writer)?;
+    Ok(())
+}
+
+/// DESCRIBE TYPES — list all UDT names in the current keyspace.
+async fn describe_types(session: &CqlSession, writer: &mut dyn Write) -> Result<()> {
+    let keyspace = match session.current_keyspace() {
+        Some(ks) => ks.to_string(),
+        None => {
+            writeln!(
+                writer,
+                "No keyspace selected. Use USE <keyspace> first."
+            )?;
+            return Ok(());
+        }
+    };
+
+    let udts = session.get_udts(&keyspace).await?;
+    if udts.is_empty() {
+        writeln!(writer)?;
+        writeln!(writer, "Keyspace '{keyspace}' has no user-defined types.")?;
+        writeln!(writer)?;
+        return Ok(());
+    }
+
+    writeln!(writer)?;
+    for udt in &udts {
+        write!(writer, "{}  ", udt.name)?;
+    }
+    writeln!(writer)?;
+    writeln!(writer)?;
+    Ok(())
+}
+
+/// DESCRIBE TYPE <name> — show CREATE TYPE statement.
+async fn describe_type(
+    session: &CqlSession,
+    type_spec: &str,
+    writer: &mut dyn Write,
+) -> Result<()> {
+    let (keyspace, type_name) = resolve_qualified_name(session, type_spec, writer)?;
+    let keyspace = match keyspace {
+        Some(ks) => ks,
+        None => return Ok(()),
+    };
+
+    let query = format!(
+        "SELECT type_name, field_names, field_types FROM system_schema.types WHERE keyspace_name = '{}' AND type_name = '{}'",
+        keyspace.replace('\'', "''"),
+        type_name.replace('\'', "''")
+    );
+    let result = session.execute_query(&query).await?;
+
+    if result.rows.is_empty() {
+        writeln!(writer, "Type '{keyspace}.{type_name}' not found.")?;
+        return Ok(());
+    }
+
+    let row = &result.rows[0];
+    let udt_name = row
+        .get_by_name("type_name", &result.columns)
+        .map(|v| v.to_string())
+        .unwrap_or_default();
+    let field_names_str = row
+        .get_by_name("field_names", &result.columns)
+        .map(|v| v.to_string())
+        .unwrap_or_default();
+    let field_types_str = row
+        .get_by_name("field_types", &result.columns)
+        .map(|v| v.to_string())
+        .unwrap_or_default();
+
+    let field_names = parse_list_value(&field_names_str);
+    let field_types = parse_list_value(&field_types_str);
+
+    writeln!(writer)?;
+    writeln!(
+        writer,
+        "CREATE TYPE {}.{} (",
+        quote_if_needed(&keyspace),
+        quote_if_needed(&udt_name)
+    )?;
+    for (i, (name, typ)) in field_names.iter().zip(field_types.iter()).enumerate() {
+        let comma = if i < field_names.len() - 1 { "," } else { "" };
+        writeln!(writer, "    {} {}{}", quote_if_needed(name), typ, comma)?;
+    }
+    writeln!(writer, ");")?;
+    writeln!(writer)?;
+    Ok(())
+}
+
+/// DESCRIBE FUNCTIONS — list all UDF names in the current keyspace.
+async fn describe_functions(session: &CqlSession, writer: &mut dyn Write) -> Result<()> {
+    let keyspace = match session.current_keyspace() {
+        Some(ks) => ks.to_string(),
+        None => {
+            writeln!(
+                writer,
+                "No keyspace selected. Use USE <keyspace> first."
+            )?;
+            return Ok(());
+        }
+    };
+
+    let functions = session.get_functions(&keyspace).await?;
+    if functions.is_empty() {
+        writeln!(writer)?;
+        writeln!(
+            writer,
+            "Keyspace '{keyspace}' has no user-defined functions."
+        )?;
+        writeln!(writer)?;
+        return Ok(());
+    }
+
+    writeln!(writer)?;
+    for func in &functions {
+        write!(writer, "{}  ", func.name)?;
+    }
+    writeln!(writer)?;
+    writeln!(writer)?;
+    Ok(())
+}
+
+/// DESCRIBE FUNCTION <name> — show CREATE FUNCTION statement.
+async fn describe_function(
+    session: &CqlSession,
+    func_spec: &str,
+    writer: &mut dyn Write,
+) -> Result<()> {
+    let (keyspace, func_name) = resolve_qualified_name(session, func_spec, writer)?;
+    let keyspace = match keyspace {
+        Some(ks) => ks,
+        None => return Ok(()),
+    };
+
+    let query = format!(
+        "SELECT function_name, argument_names, argument_types, return_type, language, body, called_on_null_input FROM system_schema.functions WHERE keyspace_name = '{}' AND function_name = '{}'",
+        keyspace.replace('\'', "''"),
+        func_name.replace('\'', "''")
+    );
+    let result = session.execute_query(&query).await?;
+
+    if result.rows.is_empty() {
+        writeln!(writer, "Function '{keyspace}.{func_name}' not found.")?;
+        return Ok(());
+    }
+
+    let row = &result.rows[0];
+    let fn_name = row
+        .get_by_name("function_name", &result.columns)
+        .map(|v| v.to_string())
+        .unwrap_or_default();
+    let arg_names_str = row
+        .get_by_name("argument_names", &result.columns)
+        .map(|v| v.to_string())
+        .unwrap_or_default();
+    let arg_types_str = row
+        .get_by_name("argument_types", &result.columns)
+        .map(|v| v.to_string())
+        .unwrap_or_default();
+    let return_type = row
+        .get_by_name("return_type", &result.columns)
+        .map(|v| v.to_string())
+        .unwrap_or_default();
+    let language = row
+        .get_by_name("language", &result.columns)
+        .map(|v| v.to_string())
+        .unwrap_or_default();
+    let body = row
+        .get_by_name("body", &result.columns)
+        .map(|v| v.to_string())
+        .unwrap_or_default();
+    let called_on_null = row
+        .get_by_name("called_on_null_input", &result.columns)
+        .map(|v| v.to_string() == "True")
+        .unwrap_or(false);
+
+    let arg_names = parse_list_value(&arg_names_str);
+    let arg_types = parse_list_value(&arg_types_str);
+
+    let args_str = arg_names
+        .iter()
+        .zip(arg_types.iter())
+        .map(|(name, typ)| format!("{} {}", quote_if_needed(name), typ))
+        .collect::<Vec<_>>()
+        .join(", ");
+
+    let null_handling = if called_on_null {
+        "CALLED ON NULL INPUT"
+    } else {
+        "RETURNS NULL ON NULL INPUT"
+    };
+
+    writeln!(writer)?;
+    writeln!(
+        writer,
+        "CREATE OR REPLACE FUNCTION {}.{} ({})",
+        quote_if_needed(&keyspace),
+        quote_if_needed(&fn_name),
+        args_str
+    )?;
+    writeln!(writer, "    {null_handling}")?;
+    writeln!(writer, "    RETURNS {return_type}")?;
+    writeln!(writer, "    LANGUAGE {language}")?;
+    writeln!(writer, "    AS $$ {} $$;", body)?;
+    writeln!(writer)?;
+    Ok(())
+}
+
+/// DESCRIBE AGGREGATES — list all UDA names in the current keyspace.
+async fn describe_aggregates(session: &CqlSession, writer: &mut dyn Write) -> Result<()> {
+    let keyspace = match session.current_keyspace() {
+        Some(ks) => ks.to_string(),
+        None => {
+            writeln!(
+                writer,
+                "No keyspace selected. Use USE <keyspace> first."
+            )?;
+            return Ok(());
+        }
+    };
+
+    let aggregates = session.get_aggregates(&keyspace).await?;
+    if aggregates.is_empty() {
+        writeln!(writer)?;
+        writeln!(
+            writer,
+            "Keyspace '{keyspace}' has no user-defined aggregates."
+        )?;
+        writeln!(writer)?;
+        return Ok(());
+    }
+
+    writeln!(writer)?;
+    for agg in &aggregates {
+        write!(writer, "{}  ", agg.name)?;
+    }
+    writeln!(writer)?;
+    writeln!(writer)?;
+    Ok(())
+}
+
+/// DESCRIBE AGGREGATE <name> — show CREATE AGGREGATE statement.
+async fn describe_aggregate(
+    session: &CqlSession,
+    agg_spec: &str,
+    writer: &mut dyn Write,
+) -> Result<()> {
+    let (keyspace, agg_name) = resolve_qualified_name(session, agg_spec, writer)?;
+    let keyspace = match keyspace {
+        Some(ks) => ks,
+        None => return Ok(()),
+    };
+
+    let query = format!(
+        "SELECT aggregate_name, argument_types, state_func, state_type, final_func, initcond FROM system_schema.aggregates WHERE keyspace_name = '{}' AND aggregate_name = '{}'",
+        keyspace.replace('\'', "''"),
+        agg_name.replace('\'', "''")
+    );
+    let result = session.execute_query(&query).await?;
+
+    if result.rows.is_empty() {
+        writeln!(writer, "Aggregate '{keyspace}.{agg_name}' not found.")?;
+        return Ok(());
+    }
+
+    let row = &result.rows[0];
+    let ag_name = row
+        .get_by_name("aggregate_name", &result.columns)
+        .map(|v| v.to_string())
+        .unwrap_or_default();
+    let arg_types_str = row
+        .get_by_name("argument_types", &result.columns)
+        .map(|v| v.to_string())
+        .unwrap_or_default();
+    let state_func = row
+        .get_by_name("state_func", &result.columns)
+        .map(|v| v.to_string())
+        .unwrap_or_default();
+    let state_type = row
+        .get_by_name("state_type", &result.columns)
+        .map(|v| v.to_string())
+        .unwrap_or_default();
+    let final_func = row
+        .get_by_name("final_func", &result.columns)
+        .map(|v| v.to_string());
+    let initcond = row
+        .get_by_name("initcond", &result.columns)
+        .map(|v| v.to_string());
+
+    let arg_types = parse_list_value(&arg_types_str);
+    let args_str = arg_types.join(", ");
+
+    writeln!(writer)?;
+    writeln!(
+        writer,
+        "CREATE OR REPLACE AGGREGATE {}.{} ({})",
+        quote_if_needed(&keyspace),
+        quote_if_needed(&ag_name),
+        args_str
+    )?;
+    writeln!(writer, "    SFUNC {state_func}")?;
+    writeln!(writer, "    STYPE {state_type}")?;
+    if let Some(ref ff) = final_func {
+        if !ff.is_empty() && ff != "null" {
+            writeln!(writer, "    FINALFUNC {ff}")?;
+        }
+    }
+    if let Some(ref ic) = initcond {
+        if !ic.is_empty() && ic != "null" {
+            writeln!(writer, "    INITCOND {ic}")?;
+        }
+    }
+    writeln!(writer, ";")?;
     writeln!(writer)?;
     Ok(())
 }
@@ -367,6 +975,66 @@ fn strip_quotes(s: &str) -> &str {
     } else {
         s
     }
+}
+
+/// Resolve a possibly qualified name (e.g., "ks.table" or just "table") into
+/// (keyspace, name). If no keyspace is specified, uses the session's current keyspace.
+/// Returns `(None, _)` and prints an error if no keyspace context is available.
+fn resolve_qualified_name(
+    session: &CqlSession,
+    spec: &str,
+    writer: &mut dyn Write,
+) -> Result<(Option<String>, String)> {
+    if let Some(dot_pos) = spec.find('.') {
+        let ks = strip_quotes(&spec[..dot_pos]).to_string();
+        let name = strip_quotes(&spec[dot_pos + 1..]).to_string();
+        Ok((Some(ks), name))
+    } else {
+        let name = strip_quotes(spec).to_string();
+        if let Some(ks) = session.current_keyspace() {
+            Ok((Some(ks.to_string()), name))
+        } else {
+            writeln!(
+                writer,
+                "No keyspace specified. Use <keyspace>.{name} or USE <keyspace> first."
+            )?;
+            Ok((None, name))
+        }
+    }
+}
+
+/// Extract a value from a CQL map literal string like `{'key': 'value', ...}`.
+fn extract_map_value(map_str: &str, key: &str) -> Option<String> {
+    // Simple parser for CQL map literal format: {'key': 'value', ...}
+    let trimmed = map_str.trim();
+    let inner = trimmed.strip_prefix('{')?.strip_suffix('}')?;
+    for pair in inner.split(',') {
+        let pair = pair.trim();
+        if let Some((k, v)) = pair.split_once(':') {
+            let k = k.trim().trim_matches('\'').trim_matches('"');
+            let v = v.trim().trim_matches('\'').trim_matches('"');
+            if k == key {
+                return Some(v.to_string());
+            }
+        }
+    }
+    None
+}
+
+/// Parse a CQL list literal string like `['a', 'b', 'c']` into a Vec of strings.
+fn parse_list_value(list_str: &str) -> Vec<String> {
+    let trimmed = list_str.trim();
+    let inner = match trimmed.strip_prefix('[').and_then(|s| s.strip_suffix(']')) {
+        Some(s) => s,
+        None => return Vec::new(),
+    };
+    if inner.trim().is_empty() {
+        return Vec::new();
+    }
+    inner
+        .split(',')
+        .map(|s| s.trim().trim_matches('\'').trim_matches('"').to_string())
+        .collect()
 }
 
 #[cfg(test)]
