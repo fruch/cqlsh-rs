@@ -45,6 +45,12 @@ assert_cmd = "2"
 predicates = "3"
 tempfile = "3"
 criterion = { version = "0.5", features = ["html_reports"] }
+testcontainers = { version = "0.27", features = ["blocking"] }
+tokio = { version = "1", features = ["full", "test-util"] }
+
+[[test]]
+name = "integration"
+path = "tests/integration/main.rs"
 
 [[bench]]
 name = "startup"
