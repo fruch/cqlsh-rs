@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774526236580,
+  "lastUpdate": 1774547326086,
   "repoUrl": "https://github.com/fruch/cqlsh-rs",
   "entries": {
     "Benchmark": [
@@ -2429,6 +2429,168 @@ window.BENCHMARK_DATA = {
             "name": "end_to_end_startup/full",
             "value": 99515,
             "range": "± 599",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "noreply@anthropic.com",
+            "name": "Claude",
+            "username": "claude"
+          },
+          "committer": {
+            "email": "israel.fruchter@gmail.com",
+            "name": "Israel Fruchter",
+            "username": "fruch"
+          },
+          "distinct": true,
+          "id": "1fc728166ba46c158815a33b3a5eb04c3be5fbd3",
+          "message": "docs: update inline status markers across all SP01-SP19 plan documents\n\n- SP1-SP4: Change \"IN PROGRESS\" → \"COMPLETED\" with completion context\n- SP5-SP6: Add missing status lines, mark as COMPLETED\n- SP7: Add \"PARTIALLY COMPLETE\" status (19/25+ commands done)\n- SP8: Add \"PARTIALLY COMPLETE\" status (COPY TO done, COPY FROM pending)\n- SP9: Add \"COMPLETED\" status, check off all acceptance criteria\n- SP10: Add \"IN PROGRESS\" status (327 tests, infra pending)\n- SP11: Add \"IN PROGRESS\" status (startup benchmarks done)\n- SP12: Add \"NOT STARTED\" status\n- SP14-SP15: Add \"NOT STARTED\" status\n- SP16: Add \"COMPLETED\" status (fixes incorporated)\n- SP17-SP18: Add \"NOT STARTED\" status (post-v1)\n- SP19: Add \"IN PROGRESS\" status (analysis done, execution pending)\n- Check off completed acceptance criteria and research deliverables\n\nhttps://claude.ai/code/session_01QhVfCKDR6KRjKPdsJdEoxm",
+          "timestamp": "2026-03-26T19:38:40+02:00",
+          "tree_id": "9bf23f34e71d9da89a800d24a1c6ea0de20e15b0",
+          "url": "https://github.com/fruch/cqlsh-rs/commit/1fc728166ba46c158815a33b3a5eb04c3be5fbd3"
+        },
+        "date": 1774547325344,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "cli_parse_args/no_args",
+            "value": 15940,
+            "range": "± 43",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cli_parse_args/host_only",
+            "value": 17965,
+            "range": "± 49",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cli_parse_args/host_and_port",
+            "value": 20165,
+            "range": "± 460",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cli_parse_args/execute_mode",
+            "value": 19462,
+            "range": "± 123",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cli_parse_args/file_mode",
+            "value": 18917,
+            "range": "± 351",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cli_parse_args/full_connection",
+            "value": 37873,
+            "range": "± 174",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cli_validate/valid_full",
+            "value": 2,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cli_validate/valid_minimal",
+            "value": 2,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cqlshrc_parse/empty",
+            "value": 2807,
+            "range": "± 12",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cqlshrc_parse/minimal",
+            "value": 6115,
+            "range": "± 17",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cqlshrc_parse/full",
+            "value": 44856,
+            "range": "± 187",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cqlshrc_parse_scaling/certfiles/0",
+            "value": 5434,
+            "range": "± 17",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cqlshrc_parse_scaling/certfiles/10",
+            "value": 12416,
+            "range": "± 128",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cqlshrc_parse_scaling/certfiles/50",
+            "value": 50857,
+            "range": "± 204",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cqlshrc_parse_scaling/certfiles/100",
+            "value": 94628,
+            "range": "± 442",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "config_merge/all_defaults",
+            "value": 511,
+            "range": "± 1",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "config_merge/cli_overrides_only",
+            "value": 576,
+            "range": "± 1",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "config_merge/full_merge",
+            "value": 1100,
+            "range": "± 13",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cqlshrc_load_file/nonexistent_file",
+            "value": 1340,
+            "range": "± 17",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cqlshrc_load_file/minimal_file",
+            "value": 14592,
+            "range": "± 36",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cqlshrc_load_file/full_file",
+            "value": 53627,
+            "range": "± 911",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "end_to_end_startup/minimal",
+            "value": 21329,
+            "range": "± 95",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "end_to_end_startup/full",
+            "value": 99546,
+            "range": "± 8259",
             "unit": "ns/iter"
           }
         ]
