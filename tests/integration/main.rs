@@ -6,4 +6,7 @@
 //! Run with: cargo test --test integration -- --ignored
 
 mod core_tests;
+mod escape_tests;
 mod helpers;
+mod output_tests;
+mod unicode_tests;
