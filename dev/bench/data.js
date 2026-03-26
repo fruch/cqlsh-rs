@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774526161814,
+  "lastUpdate": 1774526236580,
   "repoUrl": "https://github.com/fruch/cqlsh-rs",
   "entries": {
     "Benchmark": [
@@ -2267,6 +2267,168 @@ window.BENCHMARK_DATA = {
             "name": "end_to_end_startup/full",
             "value": 96726,
             "range": "± 1123",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fruch@scylladb.com",
+            "name": "Israel Fruchter",
+            "username": "fruch"
+          },
+          "committer": {
+            "email": "israel.fruchter@gmail.com",
+            "name": "Israel Fruchter",
+            "username": "fruch"
+          },
+          "distinct": true,
+          "id": "b2d4fbd282764815bcea7468111269e119ff09b8",
+          "message": "feat(copy): COPY TO/FROM with CSV export and import\n\nCOPY TO: export table data to CSV file or STDOUT with 15 options\n(delimiter, quote, escape, header, null, datetime format, precision,\nbool style, page size, max output, progress reporting).\n\nCOPY FROM: import CSV data with 14 options (chunk size, batch size,\nprepared statements, TTL, max attempts, error limits, error file,\ningest rate, progress reporting, STDIN mode).\n\nAlso fix colorizer: don't highlight words after dot as keywords\n(e.g., test_ks.users no longer highlights 'users' as keyword).\n\n24 unit tests for COPY parsing and value formatting.\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-03-26T13:47:44+02:00",
+          "tree_id": "b070a6d45fdb550bfb2e3deddbdee35ff38402fd",
+          "url": "https://github.com/fruch/cqlsh-rs/commit/b2d4fbd282764815bcea7468111269e119ff09b8"
+        },
+        "date": 1774526235644,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "cli_parse_args/no_args",
+            "value": 15993,
+            "range": "± 44",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cli_parse_args/host_only",
+            "value": 17854,
+            "range": "± 53",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cli_parse_args/host_and_port",
+            "value": 20394,
+            "range": "± 1339",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cli_parse_args/execute_mode",
+            "value": 18560,
+            "range": "± 90",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cli_parse_args/file_mode",
+            "value": 19291,
+            "range": "± 86",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cli_parse_args/full_connection",
+            "value": 36843,
+            "range": "± 247",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cli_validate/valid_full",
+            "value": 2,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cli_validate/valid_minimal",
+            "value": 2,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cqlshrc_parse/empty",
+            "value": 2779,
+            "range": "± 21",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cqlshrc_parse/minimal",
+            "value": 6207,
+            "range": "± 28",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cqlshrc_parse/full",
+            "value": 44493,
+            "range": "± 156",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cqlshrc_parse_scaling/certfiles/0",
+            "value": 5459,
+            "range": "± 20",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cqlshrc_parse_scaling/certfiles/10",
+            "value": 12776,
+            "range": "± 65",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cqlshrc_parse_scaling/certfiles/50",
+            "value": 51149,
+            "range": "± 779",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cqlshrc_parse_scaling/certfiles/100",
+            "value": 95863,
+            "range": "± 663",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "config_merge/all_defaults",
+            "value": 545,
+            "range": "± 2",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "config_merge/cli_overrides_only",
+            "value": 596,
+            "range": "± 9",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "config_merge/full_merge",
+            "value": 1130,
+            "range": "± 6",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cqlshrc_load_file/nonexistent_file",
+            "value": 1339,
+            "range": "± 10",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cqlshrc_load_file/minimal_file",
+            "value": 14650,
+            "range": "± 50",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cqlshrc_load_file/full_file",
+            "value": 53347,
+            "range": "± 207",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "end_to_end_startup/minimal",
+            "value": 22000,
+            "range": "± 110",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "end_to_end_startup/full",
+            "value": 99515,
+            "range": "± 599",
             "unit": "ns/iter"
           }
         ]
