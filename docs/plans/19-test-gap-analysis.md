@@ -150,64 +150,64 @@ cqlsh-rs has **zero** integration tests that connect to a real database. All 327
 
 ## Implementation Plan
 
-### Phase 1: Integration Test Infrastructure
+### Phase 1: Integration Test Infrastructure ✅
 
-| # | Task | Description | Priority |
-|---|------|-------------|----------|
-| 1.1 | Set up testcontainers-rs | Create `tests/integration/` with ScyllaDB container setup | P0 |
-| 1.2 | Create shared test helpers | `setup_test_keyspace()`, `execute_cqlsh()`, `compare_output()` | P0 |
-| 1.3 | CI integration | Add integration test job to GitHub Actions | P0 |
+| # | Task | Description | Priority | Status |
+|---|------|-------------|----------|--------|
+| 1.1 | Set up testcontainers-rs | Create `tests/integration/` with ScyllaDB container setup | P0 | ✅ Done |
+| 1.2 | Create shared test helpers | `setup_test_keyspace()`, `execute_cqlsh()`, `compare_output()` | P0 | ✅ Done |
+| 1.3 | CI integration | Add integration test job to GitHub Actions | P0 | ✅ Done |
 
-### Phase 2: Core Integration Tests (mirrors dtest TestCqlshSmoke)
+### Phase 2: Core Integration Tests (mirrors dtest TestCqlshSmoke) ✅
 
-| # | Task | Description | Python Equivalent |
-|---|------|-------------|-------------------|
-| 2.1 | Basic CRUD tests | SELECT, INSERT, UPDATE, DELETE via `-e` flag | `test_select`, `test_insert`, `test_update`, `test_delete` |
-| 2.2 | DDL tests | CREATE/DROP KEYSPACE, TABLE, INDEX | `test_create_keyspace`, `test_drop_table`, etc. |
-| 2.3 | USE command test | USE keyspace, verify prompt changes | `test_use_keyspace` |
-| 2.4 | BATCH test | BATCH statement execution | `test_batch` |
-| 2.5 | UUID test | UUID type round trip | `test_uuid` |
-| 2.6 | TRUNCATE test | TRUNCATE with row verification | `test_truncate` |
+| # | Task | Description | Python Equivalent | Status |
+|---|------|-------------|-------------------|--------|
+| 2.1 | Basic CRUD tests | SELECT, INSERT, UPDATE, DELETE via `-e` flag | `test_select`, `test_insert`, `test_update`, `test_delete` | ✅ Done |
+| 2.2 | DDL tests | CREATE/DROP KEYSPACE, TABLE, INDEX | `test_create_keyspace`, `test_drop_table`, etc. | ✅ Done |
+| 2.3 | USE command test | USE keyspace, verify prompt changes | `test_use_keyspace` | ✅ Done |
+| 2.4 | BATCH test | BATCH statement execution | `test_batch` | ✅ Done |
+| 2.5 | UUID test | UUID type round trip | `test_uuid` | ✅ Done |
+| 2.6 | TRUNCATE test | TRUNCATE with row verification | `test_truncate` | ✅ Done |
 
-### Phase 3: Output Formatting Tests (mirrors test_cqlsh_output.py)
+### Phase 3: Output Formatting Tests (mirrors test_cqlsh_output.py) ✅
 
-| # | Task | Description | Python Equivalent |
-|---|------|-------------|-------------------|
-| 3.1 | No-color output test | Verify no ANSI codes with `--no-color` | `test_no_color_output` |
-| 3.2 | Color output test | Verify ANSI codes with `-C` | `test_color_output` |
-| 3.3 | Numeric output tests | Int, float, double, decimal display | `test_numeric_output` |
-| 3.4 | Timestamp output test | Timestamp formatting | `test_timestamp_output` |
-| 3.5 | Boolean output test | True/False display | `test_boolean_output` |
-| 3.6 | NULL output test | Null value display | `test_null_output` |
-| 3.7 | String output tests | ASCII and UTF-8 strings | `test_string_output_ascii`, `test_string_output_utf8` |
-| 3.8 | Blob output test | Hex blob display | `test_blob_output` |
-| 3.9 | Prompt test | Prompt format with keyspace/user | `test_prompt` |
-| 3.10 | DESCRIBE output tests | DESCRIBE KEYSPACE, TABLE, CLUSTER output | `test_describe_*_output` |
-| 3.11 | SHOW output test | SHOW VERSION, HOST | `test_show_output` |
-| 3.12 | HELP output test | HELP text content | `test_help`, `test_help_types` |
-| 3.13 | Error output tests | Parse/lex error messages | `test_printing_parse_error`, `test_printing_lex_error` |
-| 3.14 | Multiline test | Multi-line statement handling | `test_multiline_statements` |
-| 3.15 | EOF/exit test | Ctrl-D and EXIT behavior | `test_eof_prints_newline`, `test_exit_prints_no_newline` |
+| # | Task | Description | Python Equivalent | Status |
+|---|------|-------------|-------------------|--------|
+| 3.1 | No-color output test | Verify no ANSI codes with `--no-color` | `test_no_color_output` | ✅ Done |
+| 3.2 | Color output test | Verify ANSI codes with `-C` | `test_color_output` | ✅ Done |
+| 3.3 | Numeric output tests | Int, float, double, decimal display | `test_numeric_output` | ✅ Done |
+| 3.4 | Timestamp output test | Timestamp formatting | `test_timestamp_output` | ✅ Done |
+| 3.5 | Boolean output test | True/False display | `test_boolean_output` | ✅ Done |
+| 3.6 | NULL output test | Null value display | `test_null_output` | ✅ Done |
+| 3.7 | String output tests | ASCII and UTF-8 strings | `test_string_output_ascii`, `test_string_output_utf8` | ✅ Done |
+| 3.8 | Blob output test | Hex blob display | `test_blob_output` | ✅ Done |
+| 3.9 | Prompt test | Prompt format with keyspace/user | `test_prompt` | ✅ Done |
+| 3.10 | DESCRIBE output tests | DESCRIBE KEYSPACE, TABLE, CLUSTER output | `test_describe_*_output` | ✅ Done |
+| 3.11 | SHOW output test | SHOW VERSION, HOST | `test_show_output` | ✅ Done |
+| 3.12 | HELP output test | HELP text content | `test_help`, `test_help_types` | ✅ Done |
+| 3.13 | Error output tests | Parse/lex error messages | `test_printing_parse_error`, `test_printing_lex_error` | ✅ Done |
+| 3.14 | Multiline test | Multi-line statement handling | `test_multiline_statements` | ✅ Done |
+| 3.15 | EOF/exit test | Ctrl-D and EXIT behavior | `test_eof_prints_newline`, `test_exit_prints_no_newline` | ✅ Done |
 
-### Phase 4: Escape Sequence Tests (mirrors test_escape_*.py)
+### Phase 4: Escape Sequence Tests (mirrors test_escape_*.py) ✅
 
-| # | Task | Description | Python Equivalent |
-|---|------|-------------|-------------------|
-| 4.1 | Hex escape decoding | `\x00`-`\xFF` decoding | `test_hex_escape_sequences` |
-| 4.2 | Standard escape decoding | `\n`, `\t`, `\r`, etc. | `test_standard_escape_sequences` |
-| 4.3 | Backslash escaping | Literal backslash handling | `test_backslash_escaping` |
-| 4.4 | Quote escaping | Quote chars in strings | `test_quote_escaping` |
-| 4.5 | Control char round-trip | Insert + select control chars | `test_control_chars_roundtrip` |
-| 4.6 | Mixed content round-trip | Mixed escape sequences | `test_mixed_content_roundtrip` |
+| # | Task | Description | Python Equivalent | Status |
+|---|------|-------------|-------------------|--------|
+| 4.1 | Hex escape decoding | `\x00`-`\xFF` decoding | `test_hex_escape_sequences` | ✅ Done |
+| 4.2 | Standard escape decoding | `\n`, `\t`, `\r`, etc. | `test_standard_escape_sequences` | ✅ Done |
+| 4.3 | Backslash escaping | Literal backslash handling | `test_backslash_escaping` | ✅ Done |
+| 4.4 | Quote escaping | Quote chars in strings | `test_quote_escaping` | ✅ Done |
+| 4.5 | Control char round-trip | Insert + select control chars | `test_control_chars_roundtrip` | ✅ Done |
+| 4.6 | Mixed content round-trip | Mixed escape sequences | `test_mixed_content_roundtrip` | ✅ Done |
 
-### Phase 5: Unicode Tests (mirrors test_unicode.py)
+### Phase 5: Unicode Tests (mirrors test_unicode.py) ✅
 
-| # | Task | Description | Python Equivalent |
-|---|------|-------------|-------------------|
-| 5.1 | Unicode value round-trip | Insert + select Unicode values | `test_unicode_value_round_trip` |
-| 5.2 | Unicode identifiers | Unicode in table/column names | `test_unicode_identifier` |
-| 5.3 | Unicode multiline | Multi-line Unicode input | `test_unicode_multiline_input` |
-| 5.4 | Unicode DESCRIBE | DESCRIBE with Unicode names | `test_unicode_desc` |
+| # | Task | Description | Python Equivalent | Status |
+|---|------|-------------|-------------------|--------|
+| 5.1 | Unicode value round-trip | Insert + select Unicode values | `test_unicode_value_round_trip` | ✅ Done |
+| 5.2 | Unicode identifiers | Unicode in table/column names | `test_unicode_identifier` | ✅ Done |
+| 5.3 | Unicode multiline | Multi-line Unicode input | `test_unicode_multiline_input` | ✅ Done |
+| 5.4 | Unicode DESCRIBE | DESCRIBE with Unicode names | `test_unicode_desc` | ✅ Done |
 
 ### Phase 6: COPY Integration Tests (mirrors cqlsh_copy_tests.py)
 
