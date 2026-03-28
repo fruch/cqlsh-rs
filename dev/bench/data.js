@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774548788116,
+  "lastUpdate": 1774731848530,
   "repoUrl": "https://github.com/fruch/cqlsh-rs",
   "entries": {
     "Benchmark": [
@@ -2754,6 +2754,95 @@ window.BENCHMARK_DATA = {
             "value": 100636,
             "range": "± 382",
             "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fruch@scylladb.com",
+            "name": "Israel Fruchter",
+            "username": "fruch"
+          },
+          "committer": {
+            "email": "israel.fruchter@gmail.com",
+            "name": "Israel Fruchter",
+            "username": "fruch"
+          },
+          "distinct": true,
+          "id": "5913bfc3006a1f3db24dd8cd34b0189ee895badf",
+          "message": "fix(ci): remove unsupported --output-format bencher flag\n\nCriterion 0.5 doesn't support --output-format bencher. Run cargo bench\nwithout format flags and update the summary script to parse both bencher\nand Criterion's default output format.\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-03-28T23:43:19+03:00",
+          "tree_id": "dff02b0662efbf0ab344c5379924745c2b9d9200",
+          "url": "https://github.com/fruch/cqlsh-rs/commit/5913bfc3006a1f3db24dd8cd34b0189ee895badf"
+        },
+        "date": 1774731848117,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "format_table/rows/10",
+            "value": 52830,
+            "unit": "ns"
+          },
+          {
+            "name": "format_table/rows/100",
+            "value": 510300,
+            "unit": "ns"
+          },
+          {
+            "name": "format_table/rows/1000",
+            "value": 5090300,
+            "unit": "ns"
+          },
+          {
+            "name": "format_expanded/rows/10",
+            "value": 6698,
+            "unit": "ns"
+          },
+          {
+            "name": "parse_multiline/6_lines",
+            "value": 3854,
+            "unit": "ns"
+          },
+          {
+            "name": "classify_input/empty",
+            "value": 5,
+            "unit": "ns"
+          },
+          {
+            "name": "cli_parse_args/no_args",
+            "value": 16187,
+            "unit": "ns"
+          },
+          {
+            "name": "cli_validate/valid_full",
+            "value": 2,
+            "unit": "ns"
+          },
+          {
+            "name": "cqlshrc_parse/empty",
+            "value": 2848,
+            "unit": "ns"
+          },
+          {
+            "name": "cqlshrc_parse/minimal",
+            "value": 6117,
+            "unit": "ns"
+          },
+          {
+            "name": "cqlshrc_parse/full",
+            "value": 44339,
+            "unit": "ns"
+          },
+          {
+            "name": "config_merge/full_merge",
+            "value": 1103,
+            "unit": "ns"
+          },
+          {
+            "name": "end_to_end_startup/full",
+            "value": 97638,
+            "unit": "ns"
           }
         ]
       }
