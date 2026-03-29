@@ -23,51 +23,61 @@ pub struct ScyllaContainer {
     pub host: String,
 }
 
-/// Global singleton container to avoid spinning up a new one per test.
-static SCYLLA: OnceLock<ScyllaContainer> = OnceLock::new();
-
-/// Get or create the shared ScyllaDB test container.
+/// Outcome of a single container-start attempt.
 ///
-/// The container is started once and reused across all integration tests.
-/// Each test should create its own keyspace to avoid interference.
+/// Stored in `OnceLock` so the start is attempted exactly once.
+/// If it fails the `Err` is remembered and all subsequent tests skip
+/// quickly without triggering more Docker start attempts.
+type StartResult = Result<ScyllaContainer, String>;
+
+static SCYLLA: OnceLock<StartResult> = OnceLock::new();
+
+/// Return the shared ScyllaDB container, starting it on first call.
+///
+/// Panics if the container failed to start (message includes the error).
+/// Uses `OnceLock<Result<…>>` so Docker is contacted exactly once even
+/// when a container start fails mid-way.
 pub fn get_scylla() -> &'static ScyllaContainer {
-    SCYLLA.get_or_init(|| {
-        let image = GenericImage::new("scylladb/scylla", "6.2")
-            .with_wait_for(WaitFor::message_on_stderr("serving"));
+    SCYLLA
+        .get_or_init(start_scylla)
+        .as_ref()
+        .expect("ScyllaDB container is not available")
+}
 
-        let container = image
-            .with_exposed_port(CQL_PORT.tcp())
-            .with_cmd(vec![
-                "--smp".to_string(),
-                "1".to_string(),
-                "--memory".to_string(),
-                "512M".to_string(),
-                "--overprovisioned".to_string(),
-                "1".to_string(),
-                "--skip-wait-for-gossip-to-settle".to_string(),
-                "0".to_string(),
-            ])
-            .with_startup_timeout(Duration::from_secs(120))
-            .start()
-            .expect("failed to start ScyllaDB container");
+fn start_scylla() -> StartResult {
+    let container = GenericImage::new("scylladb/scylla", "6.2")
+        .with_wait_for(WaitFor::message_on_stderr("serving"))
+        .with_exposed_port(CQL_PORT.tcp())
+        .with_cmd(vec![
+            "--smp".to_string(),
+            "1".to_string(),
+            "--memory".to_string(),
+            "512M".to_string(),
+            "--overprovisioned".to_string(),
+            "1".to_string(),
+            "--skip-wait-for-gossip-to-settle".to_string(),
+            "0".to_string(),
+        ])
+        .with_startup_timeout(Duration::from_secs(120))
+        .start()
+        .map_err(|e| format!("failed to start ScyllaDB container: {e}"))?;
 
-        let port = container
-            .get_host_port_ipv4(CQL_PORT)
-            .expect("failed to get mapped port");
+    let port = container
+        .get_host_port_ipv4(CQL_PORT)
+        .map_err(|e| format!("failed to get mapped port: {e}"))?;
 
-        let host = container
-            .get_host()
-            .expect("failed to get container host")
-            .to_string();
+    let host = container
+        .get_host()
+        .map_err(|e| format!("failed to get container host: {e}"))?
+        .to_string();
 
-        // Wait a bit for CQL to be fully ready after the log message
-        std::thread::sleep(Duration::from_secs(5));
+    // Wait a bit for CQL to be fully ready after the log message
+    std::thread::sleep(Duration::from_secs(5));
 
-        ScyllaContainer {
-            _container: container,
-            port,
-            host,
-        }
+    Ok(ScyllaContainer {
+        _container: container,
+        port,
+        host,
     })
 }
 
