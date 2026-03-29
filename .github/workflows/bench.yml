@@ -84,7 +84,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: benchmark-output-${{ github.sha }}
-          path: output.txt
+          path: bench_output.txt
           retention-days: 90
 
       - name: Ensure gh-pages branch exists
@@ -104,8 +104,8 @@ jobs:
       - name: Store results & track history
         uses: benchmark-action/github-action-benchmark@v1
         with:
-          tool: 'customSmallerIsBetter'
-          output-file-path: output.json
+          tool: 'criterion'
+          output-file-path: bench_output.txt
           github-token: ${{ secrets.GITHUB_TOKEN }}
           # Only push historical data on main merges (not PRs/schedule)
           auto-push: ${{ github.event_name == 'push' }}
