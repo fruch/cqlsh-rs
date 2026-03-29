@@ -125,10 +125,7 @@ pub async fn execute(session: &CqlSession, args: &str, writer: &mut dyn Write) -
 
 /// DESCRIBE CLUSTER — show cluster name and partitioner.
 async fn describe_cluster(session: &CqlSession, writer: &mut dyn Write) -> Result<()> {
-    let cluster_name = session
-        .cluster_name
-        .as_deref()
-        .unwrap_or("Unknown Cluster");
+    let cluster_name = session.cluster_name.as_deref().unwrap_or("Unknown Cluster");
 
     writeln!(writer)?;
     writeln!(writer, "Cluster: {cluster_name}")?;
@@ -358,19 +355,30 @@ async fn describe_index(
         None => return Ok(()),
     };
 
+    // system_schema.indexes PK is (keyspace_name, table_name, index_name).
+    // We cannot filter on index_name without table_name, so we scan the whole
+    // keyspace partition and match in Rust.
     let query = format!(
-        "SELECT index_name, table_name, kind, options FROM system_schema.indexes WHERE keyspace_name = '{}' AND index_name = '{}'",
+        "SELECT index_name, table_name, kind, options FROM system_schema.indexes WHERE keyspace_name = '{}'",
         keyspace.replace('\'', "''"),
-        index_name.replace('\'', "''")
     );
     let result = session.execute_query(&query).await?;
 
-    if result.rows.is_empty() {
-        writeln!(writer, "Index '{keyspace}.{index_name}' not found.")?;
-        return Ok(());
-    }
+    let row = result.rows.iter().find(|r| {
+        r.get_by_name("index_name", &result.columns)
+            .map(|v| v.to_string().to_lowercase())
+            .as_deref()
+            == Some(index_name.to_lowercase().as_str())
+    });
 
-    let row = &result.rows[0];
+    let row = match row {
+        Some(r) => r,
+        None => {
+            writeln!(writer, "Index '{keyspace}.{index_name}' not found.")?;
+            return Ok(());
+        }
+    };
+
     let idx_name = row
         .get_by_name("index_name", &result.columns)
         .map(|v| v.to_string())
@@ -388,16 +396,11 @@ async fn describe_index(
     // The options map contains 'target' key with the indexed column
     let target = extract_map_value(&options, "target").unwrap_or_else(|| "unknown".to_string());
 
-    writeln!(writer)?;
-    writeln!(
+    write!(
         writer,
-        "CREATE INDEX {} ON {}.{} ({});",
-        quote_if_needed(&idx_name),
-        quote_if_needed(&keyspace),
-        quote_if_needed(&table_name),
-        target
+        "{}",
+        format_index_ddl(&keyspace, &idx_name, &table_name, &target)
     )?;
-    writeln!(writer)?;
     Ok(())
 }
 
@@ -447,8 +450,10 @@ async fn describe_materialized_view(
         .unwrap_or(false);
 
     // Fetch columns for the view
+    // system_schema.columns is clustered by column_name, not position, so we
+    // cannot ORDER BY position in CQL — fetch all and sort in Rust.
     let col_query = format!(
-        "SELECT column_name, type, kind, position, clustering_order FROM system_schema.columns WHERE keyspace_name = '{}' AND table_name = '{}' ORDER BY position",
+        "SELECT column_name, type, kind, position, clustering_order FROM system_schema.columns WHERE keyspace_name = '{}' AND table_name = '{}'",
         keyspace.replace('\'', "''"),
         mv_name.replace('\'', "''")
     );
@@ -488,74 +493,26 @@ async fn describe_materialized_view(
     partition_keys.sort_by_key(|k| k.0);
     clustering_keys.sort_by_key(|k| k.0);
 
-    // Build CREATE MATERIALIZED VIEW statement
-    writeln!(writer)?;
-    writeln!(
-        writer,
-        "CREATE MATERIALIZED VIEW {}.{} AS",
-        quote_if_needed(&keyspace),
-        quote_if_needed(&mv_name)
-    )?;
-
-    let columns_str = if include_all {
-        "*".to_string()
-    } else {
-        select_columns
-            .iter()
-            .map(|c| quote_if_needed(c))
-            .collect::<Vec<_>>()
-            .join(", ")
-    };
-    writeln!(writer, "    SELECT {columns_str}")?;
-    writeln!(
-        writer,
-        "    FROM {}.{}",
-        quote_if_needed(&keyspace),
-        quote_if_needed(&base_table)
-    )?;
-    writeln!(writer, "    WHERE {where_clause}")?;
-
-    // PRIMARY KEY
-    let pk_str = if partition_keys.len() == 1 {
-        quote_if_needed(&partition_keys[0].1)
-    } else {
-        format!(
-            "({})",
-            partition_keys
-                .iter()
-                .map(|k| quote_if_needed(&k.1))
-                .collect::<Vec<_>>()
-                .join(", ")
-        )
-    };
-
-    if clustering_keys.is_empty() {
-        writeln!(writer, "    PRIMARY KEY ({pk_str})")?;
-    } else {
-        let ck_str = clustering_keys
-            .iter()
-            .map(|k| quote_if_needed(&k.1))
-            .collect::<Vec<_>>()
-            .join(", ");
-        writeln!(writer, "    PRIMARY KEY ({pk_str}, {ck_str})")?;
-    }
-
-    // WITH clustering order if any clustering keys have DESC order
-    let has_non_default_order = clustering_keys
+    let sorted_pk: Vec<String> = partition_keys
         .iter()
-        .any(|(_, _, order)| order.to_uppercase() == "DESC");
-    if has_non_default_order {
-        let order_str = clustering_keys
-            .iter()
-            .map(|(_, name, order)| format!("{} {}", quote_if_needed(name), order.to_uppercase()))
-            .collect::<Vec<_>>()
-            .join(", ");
-        writeln!(writer, "    WITH CLUSTERING ORDER BY ({order_str});")?;
-    } else {
-        writeln!(writer, ";")?;
-    }
+        .map(|(_, name)| name.clone())
+        .collect();
+    let sorted_ck: Vec<(String, String)> = clustering_keys
+        .iter()
+        .map(|(_, name, order)| (name.clone(), order.clone()))
+        .collect();
 
-    writeln!(writer)?;
+    let parts = MvDdlParts {
+        keyspace: &keyspace,
+        view_name: &mv_name,
+        base_table: &base_table,
+        include_all,
+        select_columns: &select_columns,
+        where_clause: &where_clause,
+        partition_keys: &sorted_pk,
+        clustering_keys: &sorted_ck,
+    };
+    write!(writer, "{}", format_create_mv_ddl(&parts))?;
     Ok(())
 }
 
@@ -564,10 +521,7 @@ async fn describe_types(session: &CqlSession, writer: &mut dyn Write) -> Result<
     let keyspace = match session.current_keyspace() {
         Some(ks) => ks.to_string(),
         None => {
-            writeln!(
-                writer,
-                "No keyspace selected. Use USE <keyspace> first."
-            )?;
+            writeln!(writer, "No keyspace selected. Use USE <keyspace> first.")?;
             return Ok(());
         }
     };
@@ -630,26 +584,17 @@ async fn describe_type(
     let field_names = parse_list_value(&field_names_str);
     let field_types = parse_list_value(&field_types_str);
 
-    writeln!(writer)?;
-    writeln!(
-        writer,
-        "CREATE TYPE {}.{} (",
-        quote_if_needed(&keyspace),
-        quote_if_needed(&udt_name)
-    )?;
     let field_count = field_names.len().min(field_types.len());
-    for i in 0..field_count {
-        let comma = if i < field_count - 1 { "," } else { "" };
-        writeln!(
-            writer,
-            "    {} {}{}",
-            quote_if_needed(&field_names[i]),
-            field_types[i],
-            comma
-        )?;
-    }
-    writeln!(writer, ");")?;
-    writeln!(writer)?;
+    let fields: Vec<(String, String)> = field_names
+        .into_iter()
+        .take(field_count)
+        .zip(field_types.into_iter())
+        .collect();
+    write!(
+        writer,
+        "{}",
+        format_create_type_ddl(&keyspace, &udt_name, &fields)
+    )?;
     Ok(())
 }
 
@@ -658,10 +603,7 @@ async fn describe_functions(session: &CqlSession, writer: &mut dyn Write) -> Res
     let keyspace = match session.current_keyspace() {
         Some(ks) => ks.to_string(),
         None => {
-            writeln!(
-                writer,
-                "No keyspace selected. Use USE <keyspace> first."
-            )?;
+            writeln!(writer, "No keyspace selected. Use USE <keyspace> first.")?;
             return Ok(());
         }
     };
@@ -756,19 +698,19 @@ async fn describe_function(
         "RETURNS NULL ON NULL INPUT"
     };
 
-    writeln!(writer)?;
-    writeln!(
+    write!(
         writer,
-        "CREATE OR REPLACE FUNCTION {}.{} ({})",
-        quote_if_needed(&keyspace),
-        quote_if_needed(&fn_name),
-        args_str
+        "{}",
+        format_create_function_ddl(
+            &keyspace,
+            &fn_name,
+            &args_str,
+            null_handling,
+            &return_type,
+            &language,
+            &body,
+        )
     )?;
-    writeln!(writer, "    {null_handling}")?;
-    writeln!(writer, "    RETURNS {return_type}")?;
-    writeln!(writer, "    LANGUAGE {language}")?;
-    writeln!(writer, "    AS $$ {} $$;", body)?;
-    writeln!(writer)?;
     Ok(())
 }
 
@@ -777,10 +719,7 @@ async fn describe_aggregates(session: &CqlSession, writer: &mut dyn Write) -> Re
     let keyspace = match session.current_keyspace() {
         Some(ks) => ks.to_string(),
         None => {
-            writeln!(
-                writer,
-                "No keyspace selected. Use USE <keyspace> first."
-            )?;
+            writeln!(writer, "No keyspace selected. Use USE <keyspace> first.")?;
             return Ok(());
         }
     };
@@ -856,36 +795,24 @@ async fn describe_aggregate(
     let arg_types = parse_list_value(&arg_types_str);
     let args_str = arg_types.join(", ");
 
-    writeln!(writer)?;
-    writeln!(
+    write!(
         writer,
-        "CREATE OR REPLACE AGGREGATE {}.{} ({})",
-        quote_if_needed(&keyspace),
-        quote_if_needed(&ag_name),
-        args_str
+        "{}",
+        format_create_aggregate_ddl(
+            &keyspace,
+            &ag_name,
+            &args_str,
+            &state_func,
+            &state_type,
+            final_func.as_deref(),
+            initcond.as_deref(),
+        )
     )?;
-    writeln!(writer, "    SFUNC {state_func}")?;
-    writeln!(writer, "    STYPE {state_type}")?;
-    if let Some(ref ff) = final_func {
-        if !ff.is_empty() && ff != "null" {
-            writeln!(writer, "    FINALFUNC {ff}")?;
-        }
-    }
-    if let Some(ref ic) = initcond {
-        if !ic.is_empty() && ic != "null" {
-            writeln!(writer, "    INITCOND {ic}")?;
-        }
-    }
-    writeln!(writer, ";")?;
-    writeln!(writer)?;
     Ok(())
 }
 
 /// Write a CREATE TABLE statement for the given table metadata.
-fn write_create_table(
-    writer: &mut dyn Write,
-    meta: &crate::driver::TableMetadata,
-) -> Result<()> {
+fn write_create_table(writer: &mut dyn Write, meta: &crate::driver::TableMetadata) -> Result<()> {
     writeln!(
         writer,
         "CREATE TABLE {}.{} (",
@@ -1053,6 +980,177 @@ fn strip_quotes(s: &str) -> &str {
     }
 }
 
+// --- Pure DDL formatters (testable without a session) ---
+
+/// Format a CREATE INDEX DDL string.
+fn format_index_ddl(keyspace: &str, index_name: &str, table_name: &str, target: &str) -> String {
+    format!(
+        "\nCREATE INDEX {} ON {}.{} ({});\n\n",
+        quote_if_needed(index_name),
+        quote_if_needed(keyspace),
+        quote_if_needed(table_name),
+        target
+    )
+}
+
+/// Format a CREATE TYPE DDL string.
+fn format_create_type_ddl(keyspace: &str, type_name: &str, fields: &[(String, String)]) -> String {
+    let mut out = String::new();
+    out.push('\n');
+    out.push_str(&format!(
+        "CREATE TYPE {}.{} (\n",
+        quote_if_needed(keyspace),
+        quote_if_needed(type_name)
+    ));
+    let field_count = fields.len();
+    for (i, (name, typ)) in fields.iter().enumerate() {
+        let comma = if i < field_count - 1 { "," } else { "" };
+        out.push_str(&format!("    {} {}{}\n", quote_if_needed(name), typ, comma));
+    }
+    out.push_str(");\n\n");
+    out
+}
+
+/// Format a CREATE FUNCTION DDL string.
+fn format_create_function_ddl(
+    keyspace: &str,
+    func_name: &str,
+    args_str: &str,
+    null_handling: &str,
+    return_type: &str,
+    language: &str,
+    body: &str,
+) -> String {
+    format!(
+        "\nCREATE OR REPLACE FUNCTION {}.{} ({})\n    {}\n    RETURNS {}\n    LANGUAGE {}\n    AS $$ {} $$;\n\n",
+        quote_if_needed(keyspace),
+        quote_if_needed(func_name),
+        args_str,
+        null_handling,
+        return_type,
+        language,
+        body
+    )
+}
+
+/// Format a CREATE AGGREGATE DDL string.
+fn format_create_aggregate_ddl(
+    keyspace: &str,
+    agg_name: &str,
+    args_str: &str,
+    state_func: &str,
+    state_type: &str,
+    final_func: Option<&str>,
+    initcond: Option<&str>,
+) -> String {
+    let mut out = format!(
+        "\nCREATE OR REPLACE AGGREGATE {}.{} ({})\n    SFUNC {}\n    STYPE {}",
+        quote_if_needed(keyspace),
+        quote_if_needed(agg_name),
+        args_str,
+        state_func,
+        state_type
+    );
+    if let Some(ff) = final_func {
+        if !ff.is_empty() && ff != "null" {
+            out.push_str(&format!("\n    FINALFUNC {ff}"));
+        }
+    }
+    if let Some(ic) = initcond {
+        if !ic.is_empty() && ic != "null" {
+            out.push_str(&format!("\n    INITCOND {ic}"));
+        }
+    }
+    out.push_str("\n;\n\n");
+    out
+}
+
+/// Parts needed to format a CREATE MATERIALIZED VIEW DDL string.
+struct MvDdlParts<'a> {
+    keyspace: &'a str,
+    view_name: &'a str,
+    base_table: &'a str,
+    include_all: bool,
+    select_columns: &'a [String],
+    where_clause: &'a str,
+    partition_keys: &'a [String],            // sorted by position
+    clustering_keys: &'a [(String, String)], // (name, order), sorted by position
+}
+
+/// Format a CREATE MATERIALIZED VIEW DDL string.
+fn format_create_mv_ddl(parts: &MvDdlParts<'_>) -> String {
+    let mut out = String::new();
+    out.push('\n');
+    out.push_str(&format!(
+        "CREATE MATERIALIZED VIEW {}.{} AS\n",
+        quote_if_needed(parts.keyspace),
+        quote_if_needed(parts.view_name)
+    ));
+
+    let columns_str = if parts.include_all {
+        "*".to_string()
+    } else {
+        parts
+            .select_columns
+            .iter()
+            .map(|c| quote_if_needed(c))
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    out.push_str(&format!("    SELECT {columns_str}\n"));
+    out.push_str(&format!(
+        "    FROM {}.{}\n",
+        quote_if_needed(parts.keyspace),
+        quote_if_needed(parts.base_table)
+    ));
+    out.push_str(&format!("    WHERE {}\n", parts.where_clause));
+
+    let pk_str = if parts.partition_keys.len() == 1 {
+        quote_if_needed(&parts.partition_keys[0])
+    } else {
+        format!(
+            "({})",
+            parts
+                .partition_keys
+                .iter()
+                .map(|k| quote_if_needed(k))
+                .collect::<Vec<_>>()
+                .join(", ")
+        )
+    };
+
+    if parts.clustering_keys.is_empty() {
+        out.push_str(&format!("    PRIMARY KEY ({pk_str})\n"));
+    } else {
+        let ck_str = parts
+            .clustering_keys
+            .iter()
+            .map(|(name, _)| quote_if_needed(name))
+            .collect::<Vec<_>>()
+            .join(", ");
+        out.push_str(&format!("    PRIMARY KEY ({pk_str}, {ck_str})\n"));
+    }
+
+    let has_non_default_order = parts
+        .clustering_keys
+        .iter()
+        .any(|(_, order)| order.to_uppercase() == "DESC");
+    if has_non_default_order {
+        let order_str = parts
+            .clustering_keys
+            .iter()
+            .map(|(name, order)| format!("{} {}", quote_if_needed(name), order.to_uppercase()))
+            .collect::<Vec<_>>()
+            .join(", ");
+        out.push_str(&format!("    WITH CLUSTERING ORDER BY ({order_str});\n"));
+    } else {
+        out.push_str(";\n");
+    }
+
+    out.push('\n');
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1099,10 +1197,7 @@ mod tests {
     fn parse_list_value_test() {
         assert_eq!(parse_list_value("[]"), Vec::<String>::new());
         assert_eq!(parse_list_value(""), Vec::<String>::new());
-        assert_eq!(
-            parse_list_value("['a', 'b', 'c']"),
-            vec!["a", "b", "c"]
-        );
+        assert_eq!(parse_list_value("['a', 'b', 'c']"), vec!["a", "b", "c"]);
         assert_eq!(
             parse_list_value("[int, text, uuid]"),
             vec!["int", "text", "uuid"]
@@ -1115,10 +1210,7 @@ mod tests {
             extract_map_value("{'target': 'email', 'class_name': 'foo'}", "target"),
             Some("email".to_string())
         );
-        assert_eq!(
-            extract_map_value("{'target': 'email'}", "missing"),
-            None
-        );
+        assert_eq!(extract_map_value("{'target': 'email'}", "missing"), None);
     }
 
     #[test]
@@ -1219,5 +1311,190 @@ mod tests {
         write_create_table(&mut buf, &meta).unwrap();
         let output = String::from_utf8(buf).unwrap();
         assert!(output.contains("PRIMARY KEY ((host, metric), ts)"));
+    }
+
+    // --- DDL formatter tests ---
+
+    #[test]
+    fn format_index_ddl_simple() {
+        let ddl = format_index_ddl("my_ks", "email_idx", "users", "email");
+        assert!(ddl.contains("CREATE INDEX email_idx ON my_ks.users (email);"));
+    }
+
+    #[test]
+    fn format_index_ddl_quoted_names() {
+        let ddl = format_index_ddl("MyKs", "MyIdx", "MyTable", "email");
+        assert!(ddl.contains("\"MyKs\""));
+        assert!(ddl.contains("\"MyIdx\""));
+        assert!(ddl.contains("\"MyTable\""));
+    }
+
+    #[test]
+    fn format_create_type_ddl_single_field() {
+        let fields = vec![("street".to_string(), "text".to_string())];
+        let ddl = format_create_type_ddl("ks1", "address", &fields);
+        assert!(ddl.contains("CREATE TYPE ks1.address ("));
+        assert!(ddl.contains("street text"));
+        assert!(ddl.contains(");"));
+    }
+
+    #[test]
+    fn format_create_type_ddl_multiple_fields() {
+        let fields = vec![
+            ("street".to_string(), "text".to_string()),
+            ("city".to_string(), "text".to_string()),
+            ("zip".to_string(), "int".to_string()),
+        ];
+        let ddl = format_create_type_ddl("ks1", "address", &fields);
+        assert!(
+            ddl.contains("street text,"),
+            "expected trailing comma: {ddl}"
+        );
+        assert!(ddl.contains("city text,"), "expected trailing comma: {ddl}");
+        // last field has no trailing comma
+        assert!(
+            !ddl.contains("int,"),
+            "last field should not have comma: {ddl}"
+        );
+    }
+
+    #[test]
+    fn format_create_function_ddl_called_on_null() {
+        let ddl = format_create_function_ddl(
+            "ks1",
+            "add_one",
+            "val int",
+            "CALLED ON NULL INPUT",
+            "int",
+            "java",
+            "return val + 1;",
+        );
+        assert!(ddl.contains("CREATE OR REPLACE FUNCTION ks1.add_one (val int)"));
+        assert!(ddl.contains("CALLED ON NULL INPUT"));
+        assert!(ddl.contains("RETURNS int"));
+        assert!(ddl.contains("LANGUAGE java"));
+        assert!(ddl.contains("AS $$ return val + 1; $$;"));
+    }
+
+    #[test]
+    fn format_create_function_ddl_returns_null() {
+        let ddl = format_create_function_ddl(
+            "ks1",
+            "my_func",
+            "x text",
+            "RETURNS NULL ON NULL INPUT",
+            "text",
+            "lua",
+            "return x",
+        );
+        assert!(ddl.contains("RETURNS NULL ON NULL INPUT"));
+        assert!(!ddl.contains("CALLED ON NULL INPUT"));
+    }
+
+    #[test]
+    fn format_create_aggregate_ddl_minimal() {
+        let ddl =
+            format_create_aggregate_ddl("ks1", "my_sum", "int", "state_add", "int", None, None);
+        assert!(ddl.contains("CREATE OR REPLACE AGGREGATE ks1.my_sum (int)"));
+        assert!(ddl.contains("SFUNC state_add"));
+        assert!(ddl.contains("STYPE int"));
+        assert!(!ddl.contains("FINALFUNC"));
+        assert!(!ddl.contains("INITCOND"));
+        assert!(ddl.contains(';'));
+    }
+
+    #[test]
+    fn format_create_aggregate_ddl_with_optional() {
+        let ddl = format_create_aggregate_ddl(
+            "ks1",
+            "my_avg",
+            "int",
+            "state_avg",
+            "tuple<int,int>",
+            Some("final_avg"),
+            Some("0"),
+        );
+        assert!(ddl.contains("FINALFUNC final_avg"));
+        assert!(ddl.contains("INITCOND 0"));
+    }
+
+    #[test]
+    fn format_create_aggregate_ddl_empty_optional_skipped() {
+        let ddl = format_create_aggregate_ddl(
+            "ks1",
+            "my_agg",
+            "int",
+            "sf",
+            "int",
+            Some(""),
+            Some("null"),
+        );
+        assert!(
+            !ddl.contains("FINALFUNC"),
+            "empty FINALFUNC should be omitted: {ddl}"
+        );
+        assert!(
+            !ddl.contains("INITCOND"),
+            "'null' INITCOND should be omitted: {ddl}"
+        );
+    }
+
+    #[test]
+    fn format_create_mv_ddl_simple() {
+        let cols = vec!["id".to_string(), "email".to_string()];
+        let parts = MvDdlParts {
+            keyspace: "ks1",
+            view_name: "user_by_email",
+            base_table: "users",
+            include_all: false,
+            select_columns: &cols,
+            where_clause: "email IS NOT NULL",
+            partition_keys: &["email".to_string()],
+            clustering_keys: &[],
+        };
+        let ddl = format_create_mv_ddl(&parts);
+        assert!(ddl.contains("CREATE MATERIALIZED VIEW ks1.user_by_email AS"));
+        assert!(ddl.contains("SELECT id, email"));
+        assert!(ddl.contains("FROM ks1.users"));
+        assert!(ddl.contains("WHERE email IS NOT NULL"));
+        assert!(ddl.contains("PRIMARY KEY (email)"));
+    }
+
+    #[test]
+    fn format_create_mv_ddl_include_all() {
+        let parts = MvDdlParts {
+            keyspace: "ks1",
+            view_name: "mv_all",
+            base_table: "base",
+            include_all: true,
+            select_columns: &["id".to_string()],
+            where_clause: "id IS NOT NULL",
+            partition_keys: &["id".to_string()],
+            clustering_keys: &[],
+        };
+        let ddl = format_create_mv_ddl(&parts);
+        assert!(
+            ddl.contains("SELECT *"),
+            "include_all should emit SELECT *: {ddl}"
+        );
+    }
+
+    #[test]
+    fn format_create_mv_ddl_with_clustering_desc() {
+        let cols = vec!["user_id".to_string(), "ts".to_string()];
+        let ck = vec![("ts".to_string(), "DESC".to_string())];
+        let parts = MvDdlParts {
+            keyspace: "ks1",
+            view_name: "mv_ordered",
+            base_table: "events",
+            include_all: false,
+            select_columns: &cols,
+            where_clause: "ts IS NOT NULL",
+            partition_keys: &["user_id".to_string()],
+            clustering_keys: &ck,
+        };
+        let ddl = format_create_mv_ddl(&parts);
+        assert!(ddl.contains("PRIMARY KEY (user_id, ts)"));
+        assert!(ddl.contains("WITH CLUSTERING ORDER BY (ts DESC)"));
     }
 }

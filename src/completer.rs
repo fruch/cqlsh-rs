@@ -21,56 +21,198 @@ use crate::schema_cache::SchemaCache;
 
 /// CQL keywords that can start a statement.
 const CQL_KEYWORDS: &[&str] = &[
-    "ALTER", "APPLY", "BATCH", "BEGIN", "CREATE", "DELETE", "DESCRIBE", "DROP",
-    "GRANT", "INSERT", "LIST", "REVOKE", "SELECT", "TRUNCATE", "UPDATE", "USE",
+    "ALTER", "APPLY", "BATCH", "BEGIN", "CREATE", "DELETE", "DESCRIBE", "DROP", "GRANT", "INSERT",
+    "LIST", "REVOKE", "SELECT", "TRUNCATE", "UPDATE", "USE",
 ];
 
 /// CQL clause keywords used within statements.
 const CQL_CLAUSE_KEYWORDS: &[&str] = &[
-    "ADD", "AGGREGATE", "ALL", "ALLOW", "AND", "AS", "ASC", "AUTHORIZE",
-    "BATCH", "BY", "CALLED", "CLUSTERING", "COLUMN", "COMPACT", "CONTAINS",
-    "COUNT", "CUSTOM", "DELETE", "DESC", "DESCRIBE", "DISTINCT", "DROP",
-    "ENTRIES", "EXECUTE", "EXISTS", "FILTERING", "FINALFUNC", "FROM",
-    "FROZEN", "FULL", "FUNCTION", "FUNCTIONS", "IF", "IN", "INDEX",
-    "INITCOND", "INPUT", "INSERT", "INTO", "IS", "JSON", "KEY", "KEYS",
-    "KEYSPACE", "KEYSPACES", "LANGUAGE", "LIKE", "LIMIT", "LIST", "LOGIN",
-    "MAP", "MATERIALIZED", "MODIFY", "NAMESPACE", "NORECURSIVE", "NOT",
-    "NULL", "OF", "ON", "OR", "ORDER", "PARTITION", "PASSWORD", "PER",
-    "PERMISSION", "PERMISSIONS", "PRIMARY", "RENAME", "REPLACE", "RETURNS",
-    "REVOKE", "SCHEMA", "SELECT", "SET", "SFUNC", "STATIC", "STORAGE",
-    "STYPE", "SUPERUSER", "TABLE", "TABLES", "TEXT", "TIMESTAMP", "TO",
-    "TOKEN", "TRIGGER", "TRUNCATE", "TTL", "TUPLE", "TYPE", "UNLOGGED",
-    "UPDATE", "USER", "USERS", "USING", "VALUES", "VIEW", "WHERE", "WITH",
+    "ADD",
+    "AGGREGATE",
+    "ALL",
+    "ALLOW",
+    "AND",
+    "AS",
+    "ASC",
+    "AUTHORIZE",
+    "BATCH",
+    "BY",
+    "CALLED",
+    "CLUSTERING",
+    "COLUMN",
+    "COMPACT",
+    "CONTAINS",
+    "COUNT",
+    "CUSTOM",
+    "DELETE",
+    "DESC",
+    "DESCRIBE",
+    "DISTINCT",
+    "DROP",
+    "ENTRIES",
+    "EXECUTE",
+    "EXISTS",
+    "FILTERING",
+    "FINALFUNC",
+    "FROM",
+    "FROZEN",
+    "FULL",
+    "FUNCTION",
+    "FUNCTIONS",
+    "IF",
+    "IN",
+    "INDEX",
+    "INITCOND",
+    "INPUT",
+    "INSERT",
+    "INTO",
+    "IS",
+    "JSON",
+    "KEY",
+    "KEYS",
+    "KEYSPACE",
+    "KEYSPACES",
+    "LANGUAGE",
+    "LIKE",
+    "LIMIT",
+    "LIST",
+    "LOGIN",
+    "MAP",
+    "MATERIALIZED",
+    "MODIFY",
+    "NAMESPACE",
+    "NORECURSIVE",
+    "NOT",
+    "NULL",
+    "OF",
+    "ON",
+    "OR",
+    "ORDER",
+    "PARTITION",
+    "PASSWORD",
+    "PER",
+    "PERMISSION",
+    "PERMISSIONS",
+    "PRIMARY",
+    "RENAME",
+    "REPLACE",
+    "RETURNS",
+    "REVOKE",
+    "SCHEMA",
+    "SELECT",
+    "SET",
+    "SFUNC",
+    "STATIC",
+    "STORAGE",
+    "STYPE",
+    "SUPERUSER",
+    "TABLE",
+    "TABLES",
+    "TEXT",
+    "TIMESTAMP",
+    "TO",
+    "TOKEN",
+    "TRIGGER",
+    "TRUNCATE",
+    "TTL",
+    "TUPLE",
+    "TYPE",
+    "UNLOGGED",
+    "UPDATE",
+    "USER",
+    "USERS",
+    "USING",
+    "VALUES",
+    "VIEW",
+    "WHERE",
+    "WITH",
     "WRITETIME",
 ];
 
 /// Built-in shell commands.
 const SHELL_COMMANDS: &[&str] = &[
-    "CAPTURE", "CLEAR", "CLS", "CONSISTENCY", "COPY", "DESCRIBE", "DESC",
-    "EXIT", "EXPAND", "HELP", "LOGIN", "PAGING", "QUIT", "SERIAL", "SHOW",
-    "SOURCE", "TRACING",
+    "CAPTURE",
+    "CLEAR",
+    "CLS",
+    "CONSISTENCY",
+    "COPY",
+    "DESCRIBE",
+    "DESC",
+    "EXIT",
+    "EXPAND",
+    "HELP",
+    "LOGIN",
+    "PAGING",
+    "QUIT",
+    "SERIAL",
+    "SHOW",
+    "SOURCE",
+    "TRACING",
 ];
 
 /// CQL consistency levels.
 const CONSISTENCY_LEVELS: &[&str] = &[
-    "ALL", "ANY", "EACH_QUORUM", "LOCAL_ONE", "LOCAL_QUORUM", "LOCAL_SERIAL",
-    "ONE", "QUORUM", "SERIAL", "THREE", "TWO",
+    "ALL",
+    "ANY",
+    "EACH_QUORUM",
+    "LOCAL_ONE",
+    "LOCAL_QUORUM",
+    "LOCAL_SERIAL",
+    "ONE",
+    "QUORUM",
+    "SERIAL",
+    "THREE",
+    "TWO",
 ];
 
 /// DESCRIBE sub-commands.
 const DESCRIBE_SUB_COMMANDS: &[&str] = &[
-    "AGGREGATE", "AGGREGATES", "CLUSTER", "FUNCTION", "FUNCTIONS", "INDEX",
-    "KEYSPACE", "KEYSPACES", "MATERIALIZED", "SCHEMA", "TABLE", "TABLES",
-    "TYPE", "TYPES",
+    "AGGREGATE",
+    "AGGREGATES",
+    "CLUSTER",
+    "FULL",
+    "FUNCTION",
+    "FUNCTIONS",
+    "INDEX",
+    "KEYSPACE",
+    "KEYSPACES",
+    "MATERIALIZED",
+    "SCHEMA",
+    "TABLE",
+    "TABLES",
+    "TYPE",
+    "TYPES",
 ];
 
 /// CQL data types for CREATE TABLE column definitions.
 #[allow(dead_code)] // Will be used when CqlType completion context is implemented
 const CQL_TYPES: &[&str] = &[
-    "ascii", "bigint", "blob", "boolean", "counter", "date", "decimal",
-    "double", "duration", "float", "frozen", "inet", "int", "list", "map",
-    "set", "smallint", "text", "time", "timestamp", "timeuuid", "tinyint",
-    "tuple", "uuid", "varchar", "varint",
+    "ascii",
+    "bigint",
+    "blob",
+    "boolean",
+    "counter",
+    "date",
+    "decimal",
+    "double",
+    "duration",
+    "float",
+    "frozen",
+    "inet",
+    "int",
+    "list",
+    "map",
+    "set",
+    "smallint",
+    "text",
+    "time",
+    "timestamp",
+    "timeuuid",
+    "tinyint",
+    "tuple",
+    "uuid",
+    "varchar",
+    "varint",
 ];
 
 /// Detected completion context based on the input up to the cursor.
@@ -83,7 +225,10 @@ enum CompletionContext {
     /// After FROM, INTO, UPDATE, etc. — complete with table names.
     TableName { keyspace: Option<String> },
     /// After SELECT ... FROM table WHERE — complete with column names.
-    ColumnName { keyspace: Option<String>, table: String },
+    ColumnName {
+        keyspace: Option<String>,
+        table: String,
+    },
     /// After CONSISTENCY — complete with consistency levels.
     ConsistencyLevel,
     /// After DESCRIBE/DESC — complete with sub-commands or schema names.
@@ -168,7 +313,9 @@ impl CqlCompleter {
                     // After sub-command, complete with schema names
                     return match sub.as_str() {
                         "KEYSPACE" => CompletionContext::KeyspaceName,
-                        "TABLE" | "INDEX" | "MATERIALIZED" => CompletionContext::TableName { keyspace: None },
+                        "TABLE" | "INDEX" | "MATERIALIZED" => {
+                            CompletionContext::TableName { keyspace: None }
+                        }
                         _ => CompletionContext::DescribeTarget,
                     };
                 }
@@ -206,12 +353,15 @@ impl CqlCompleter {
                 // If we're past the table name, might be column context
                 if i + 2 < tokens.len() || (i + 1 < tokens.len() && before_cursor.ends_with(' ')) {
                     // Check for WHERE clause
-                    if upper_tokens.iter().skip(i + 2).any(|t| t == "WHERE" || t == "SET") {
+                    if upper_tokens
+                        .iter()
+                        .skip(i + 2)
+                        .any(|t| t == "WHERE" || t == "SET")
+                    {
                         let table = tokens[i + 1].to_string();
                         let ks = tokio::task::block_in_place(|| {
-                            self.rt_handle.block_on(async {
-                                self.current_keyspace.read().await.clone()
-                            })
+                            self.rt_handle
+                                .block_on(async { self.current_keyspace.read().await.clone() })
                         });
                         return CompletionContext::ColumnName {
                             keyspace: ks,
@@ -255,21 +405,18 @@ impl CqlCompleter {
                 filter_candidates(DESCRIBE_SUB_COMMANDS, &prefix_upper, true)
             }
             CompletionContext::KeyspaceName => {
-                let cache = tokio::task::block_in_place(|| {
-                    self.rt_handle.block_on(self.cache.read())
-                });
+                let cache =
+                    tokio::task::block_in_place(|| self.rt_handle.block_on(self.cache.read()));
                 let names = cache.keyspace_names();
                 filter_candidates(&names, prefix, false)
             }
             CompletionContext::TableName { keyspace } => {
-                let cache = tokio::task::block_in_place(|| {
-                    self.rt_handle.block_on(self.cache.read())
-                });
+                let cache =
+                    tokio::task::block_in_place(|| self.rt_handle.block_on(self.cache.read()));
                 let ks = keyspace.clone().or_else(|| {
                     tokio::task::block_in_place(|| {
-                        self.rt_handle.block_on(async {
-                            self.current_keyspace.read().await.clone()
-                        })
+                        self.rt_handle
+                            .block_on(async { self.current_keyspace.read().await.clone() })
                     })
                 });
                 match ks {
@@ -285,14 +432,12 @@ impl CqlCompleter {
                 }
             }
             CompletionContext::ColumnName { keyspace, table } => {
-                let cache = tokio::task::block_in_place(|| {
-                    self.rt_handle.block_on(self.cache.read())
-                });
+                let cache =
+                    tokio::task::block_in_place(|| self.rt_handle.block_on(self.cache.read()));
                 let ks = keyspace.clone().or_else(|| {
                     tokio::task::block_in_place(|| {
-                        self.rt_handle.block_on(async {
-                            self.current_keyspace.read().await.clone()
-                        })
+                        self.rt_handle
+                            .block_on(async { self.current_keyspace.read().await.clone() })
                     })
                 });
                 match ks {
@@ -303,9 +448,7 @@ impl CqlCompleter {
                     None => vec![],
                 }
             }
-            CompletionContext::FilePath => {
-                complete_file_path(prefix)
-            }
+            CompletionContext::FilePath => complete_file_path(prefix),
         }
     }
 }
@@ -322,7 +465,11 @@ fn filter_candidates(candidates: &[&str], prefix: &str, uppercase: bool) -> Vec<
             }
         })
         .map(|c| {
-            let display = if uppercase { c.to_uppercase() } else { c.to_string() };
+            let display = if uppercase {
+                c.to_uppercase()
+            } else {
+                c.to_string()
+            };
             Pair {
                 display: display.clone(),
                 replacement: display,
@@ -354,7 +501,10 @@ fn complete_file_path(prefix: &str) -> Vec<Pair> {
         (expanded.as_str(), "")
     } else {
         let path = std::path::Path::new(&expanded);
-        let parent = path.parent().map(|p| p.to_str().unwrap_or(".")).unwrap_or(".");
+        let parent = path
+            .parent()
+            .map(|p| p.to_str().unwrap_or("."))
+            .unwrap_or(".");
         let file = path.file_name().and_then(|f| f.to_str()).unwrap_or("");
         (parent, file)
     };
@@ -401,9 +551,8 @@ impl Completer for CqlCompleter {
     ) -> rustyline::Result<(usize, Vec<Pair>)> {
         // block_in_place: complete() is called from within the Tokio runtime (sync rustyline trait)
         let needs_refresh = tokio::task::block_in_place(|| {
-            self.rt_handle.block_on(async {
-                self.cache.read().await.is_stale()
-            })
+            self.rt_handle
+                .block_on(async { self.cache.read().await.is_stale() })
         });
         if needs_refresh {
             // Best-effort refresh — don't block on errors
@@ -464,7 +613,12 @@ impl Highlighter for CqlCompleter {
         Cow::Borrowed(prompt)
     }
 
-    fn highlight_char(&self, _line: &str, _pos: usize, _forced: rustyline::highlight::CmdKind) -> bool {
+    fn highlight_char(
+        &self,
+        _line: &str,
+        _pos: usize,
+        _forced: rustyline::highlight::CmdKind,
+    ) -> bool {
         // Return true to trigger re-highlighting on every keystroke
         true
     }
@@ -523,10 +677,7 @@ mod tests {
     #[test]
     fn detect_use_keyspace_context() {
         let c = make_completer();
-        assert_eq!(
-            c.detect_context("USE ", 4),
-            CompletionContext::KeyspaceName
-        );
+        assert_eq!(c.detect_context("USE ", 4), CompletionContext::KeyspaceName);
     }
 
     #[test]
@@ -568,10 +719,7 @@ mod tests {
     #[test]
     fn detect_capture_file_path() {
         let c = make_completer();
-        assert_eq!(
-            c.detect_context("CAPTURE ", 8),
-            CompletionContext::FilePath
-        );
+        assert_eq!(c.detect_context("CAPTURE ", 8), CompletionContext::FilePath);
     }
 
     #[test]
@@ -616,6 +764,8 @@ mod tests {
         // /tmp should exist on all Unix systems
         let pairs = complete_file_path("/tmp/");
         // Should return entries — exact count varies
-        assert!(!pairs.is_empty() || std::fs::read_dir("/tmp").map(|d| d.count()).unwrap_or(0) == 0);
+        assert!(
+            !pairs.is_empty() || std::fs::read_dir("/tmp").map(|d| d.count()).unwrap_or(0) == 0
+        );
     }
 }

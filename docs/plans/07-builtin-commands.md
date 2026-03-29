@@ -1,7 +1,7 @@
 # Sub-Plan SP7: Built-in Commands
 
 > Parent: [high-level-design.md](high-level-design.md) | Phase: 2-4
-> **Status: PARTIALLY COMPLETE** — 19 of 25+ commands implemented (Phases 2-3 done). Remaining: DESCRIBE extensions (INDEX, VIEW, TYPE, FUNCTION, AGGREGATE), LOGIN, SHOW SESSION, safe mode. Deferred to Phase 4.
+> **Status: PARTIALLY COMPLETE** — 25+ commands implemented (DESCRIBE extensions + SHOW SESSION done in Phase 4, 2026-03-29). Remaining: LOGIN, safe mode.
 
 ## Objective
 
@@ -43,12 +43,12 @@ Implement all built-in shell commands with 100% behavior parity to Python cqlsh.
 | `DESCRIBE TABLES` | `commands/describe.rs` | 2 | Medium | List tables in keyspace |
 | `DESCRIBE TABLE <name>` | `commands/describe.rs` | 2 | High | Full CREATE TABLE DDL |
 | `DESCRIBE SCHEMA` | `commands/describe.rs` | 2 | High | All DDL for all keyspaces |
-| `DESCRIBE FULL SCHEMA` | `commands/describe.rs` | 4 | High | Include system keyspaces |
-| `DESCRIBE INDEX` | `commands/describe.rs` | 4 | Medium | CREATE INDEX DDL |
-| `DESCRIBE MATERIALIZED VIEW` | `commands/describe.rs` | 4 | Medium | CREATE MV DDL |
-| `DESCRIBE TYPE / TYPES` | `commands/describe.rs` | 4 | Medium | UDT DDL |
-| `DESCRIBE FUNCTION / FUNCTIONS` | `commands/describe.rs` | 4 | Medium | UDF DDL |
-| `DESCRIBE AGGREGATE / AGGREGATES` | `commands/describe.rs` | 4 | Medium | UDA DDL |
+| `DESCRIBE FULL SCHEMA` ✅ | `src/describe.rs` | 4 | High | Include system keyspaces |
+| `DESCRIBE INDEX` ✅ | `src/describe.rs` | 4 | Medium | CREATE INDEX DDL |
+| `DESCRIBE MATERIALIZED VIEW` ✅ | `src/describe.rs` | 4 | Medium | CREATE MV DDL |
+| `DESCRIBE TYPE / TYPES` ✅ | `src/describe.rs` | 4 | Medium | UDT DDL |
+| `DESCRIBE FUNCTION / FUNCTIONS` ✅ | `src/describe.rs` | 4 | Medium | UDF DDL |
+| `DESCRIBE AGGREGATE / AGGREGATES` ✅ | `src/describe.rs` | 4 | Medium | UDA DDL |
 | `CONSISTENCY [level]` | `commands/consistency.rs` | 2 | Low | Session state update |
 | `SERIAL CONSISTENCY [level]` | `commands/consistency.rs` | 2 | Low | Session state update |
 | `TRACING ON/OFF` | `commands/tracing_cmd.rs` | 2 | Medium | Query tracing toggle + display |
@@ -59,7 +59,7 @@ Implement all built-in shell commands with 100% behavior parity to Python cqlsh.
 | `LOGIN <user> [<pass>]` | `commands/login.rs` | 3 | Medium | Re-authentication |
 | `SHOW VERSION` | `commands/show.rs` | 2 | Low | Version strings |
 | `SHOW HOST` | `commands/show.rs` | 2 | Low | Connected host |
-| `SHOW SESSION <uuid>` | `commands/show.rs` | 3 | Medium | Trace session display |
+| `SHOW SESSION <uuid>` ✅ | `src/repl.rs` | 3 | Medium | Trace session display |
 | `CLEAR` / `CLS` | `commands/clear.rs` | 2 | Low | Terminal clear |
 
 ### Implementation Steps (per command)
@@ -106,9 +106,9 @@ When `--safe-mode` is enabled (via CLI flag or `safe_mode = true` in `[connectio
 
 ### Acceptance Criteria
 
-- [ ] Every command in the matrix works with correct output (19/25+ done — DESCRIBE extensions, LOGIN, SHOW SESSION remain)
+- [x] Every command in the matrix works with correct output (DESCRIBE extensions + SHOW SESSION now complete; LOGIN + safe mode deferred)
 - [x] HELP shows correct help text for each command
-- [x] DESCRIBE output matches Python cqlsh DDL format (for implemented DESCRIBE variants)
+- [x] DESCRIBE output matches Python cqlsh DDL format (INDEX, MV, TYPE, FUNCTION, AGGREGATE, FULL SCHEMA all implemented)
 - [x] Error messages match Python cqlsh
 - [x] Commands are case-insensitive
 - [x] Invalid arguments produce helpful errors

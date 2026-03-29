@@ -96,6 +96,14 @@ impl ScyllaDriver {
         Ok(Arc::new(config))
     }
 
+    /// Extract a `Vec<String>` from a `CqlValue::List` column value.
+    fn extract_string_list_val(val: Option<&CqlValue>) -> Vec<String> {
+        match val {
+            Some(CqlValue::List(items)) => items.iter().map(|v| v.to_string()).collect(),
+            _ => Vec::new(),
+        }
+    }
+
     /// Convert a scylla QueryResult into our CqlResult type.
     fn convert_query_result(result: QueryResult) -> Result<CqlResult> {
         let tracing_id = result.tracing_id();
@@ -634,16 +642,92 @@ impl CqlDriver for ScyllaDriver {
         Ok(tables.into_iter().find(|t| t.name == table))
     }
 
-    async fn get_udts(&self, _keyspace: &str) -> Result<Vec<UdtMetadata>> {
-        Ok(vec![])
+    async fn get_udts(&self, keyspace: &str) -> Result<Vec<UdtMetadata>> {
+        let query = format!(
+            "SELECT type_name, field_names, field_types FROM system_schema.types WHERE keyspace_name = '{}'",
+            keyspace.replace('\'', "''")
+        );
+        let result = self.execute_unpaged(&query).await?;
+        let udts = result
+            .rows
+            .iter()
+            .filter_map(|row| {
+                let name = row.get_by_name("type_name", &result.columns)?.to_string();
+                let field_names =
+                    Self::extract_string_list_val(row.get_by_name("field_names", &result.columns));
+                let field_types =
+                    Self::extract_string_list_val(row.get_by_name("field_types", &result.columns));
+                Some(UdtMetadata {
+                    keyspace: keyspace.to_string(),
+                    name,
+                    field_names,
+                    field_types,
+                })
+            })
+            .collect();
+        Ok(udts)
     }
 
-    async fn get_functions(&self, _keyspace: &str) -> Result<Vec<FunctionMetadata>> {
-        Ok(vec![])
+    async fn get_functions(&self, keyspace: &str) -> Result<Vec<FunctionMetadata>> {
+        let query = format!(
+            "SELECT function_name, argument_types, return_type FROM system_schema.functions WHERE keyspace_name = '{}'",
+            keyspace.replace('\'', "''")
+        );
+        let result = self.execute_unpaged(&query).await?;
+        let functions = result
+            .rows
+            .iter()
+            .filter_map(|row| {
+                let name = row
+                    .get_by_name("function_name", &result.columns)?
+                    .to_string();
+                let argument_types = Self::extract_string_list_val(
+                    row.get_by_name("argument_types", &result.columns),
+                );
+                let return_type = row
+                    .get_by_name("return_type", &result.columns)
+                    .map(|v| v.to_string())
+                    .unwrap_or_default();
+                Some(FunctionMetadata {
+                    keyspace: keyspace.to_string(),
+                    name,
+                    argument_types,
+                    return_type,
+                })
+            })
+            .collect();
+        Ok(functions)
     }
 
-    async fn get_aggregates(&self, _keyspace: &str) -> Result<Vec<AggregateMetadata>> {
-        Ok(vec![])
+    async fn get_aggregates(&self, keyspace: &str) -> Result<Vec<AggregateMetadata>> {
+        let query = format!(
+            "SELECT aggregate_name, argument_types, return_type FROM system_schema.aggregates WHERE keyspace_name = '{}'",
+            keyspace.replace('\'', "''")
+        );
+        let result = self.execute_unpaged(&query).await?;
+        let aggregates = result
+            .rows
+            .iter()
+            .filter_map(|row| {
+                let name = row
+                    .get_by_name("aggregate_name", &result.columns)?
+                    .to_string();
+                let argument_types = Self::extract_string_list_val(
+                    row.get_by_name("argument_types", &result.columns),
+                );
+                let return_type = row
+                    .get_by_name("return_type", &result.columns)
+                    .map(|v| v.to_string())
+                    .unwrap_or_default();
+                Some(AggregateMetadata {
+                    keyspace: keyspace.to_string(),
+                    name,
+                    argument_types,
+                    return_type,
+                })
+            })
+            .collect();
+        Ok(aggregates)
     }
 
     async fn get_cluster_name(&self) -> Result<Option<String>> {
