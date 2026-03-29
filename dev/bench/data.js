@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774816216727,
+  "lastUpdate": 1774818926493,
   "repoUrl": "https://github.com/fruch/cqlsh-rs",
   "entries": {
     "Benchmark": [
@@ -3050,6 +3050,125 @@ window.BENCHMARK_DATA = {
           {
             "name": "end_to_end_startup/full",
             "value": 90188,
+            "unit": "ns"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fruch@scylladb.com",
+            "name": "Israel Fruchter",
+            "username": "fruch"
+          },
+          "committer": {
+            "email": "fruch@scylladb.com",
+            "name": "Israel Fruchter",
+            "username": "fruch"
+          },
+          "distinct": true,
+          "id": "ccbc5c0f45a7a6c7a524d0c202cf24bf255b45e8",
+          "message": "ci: fix integration tests by disabling Docker userland-proxy\n\nDocker's userland-proxy binds a host port via listen() to forward\ntraffic into the container. On GitHub Actions runners this port is\noften already in use, causing container startup to fail with\n\"address already in use\".\n\nDisabling the userland-proxy makes Docker use kernel NAT (iptables)\ninstead, eliminating the bind conflict. Also switches from nextest\nto cargo test with --test-threads=1 to guarantee the OnceLock\nsingleton container is used correctly (nextest's parallel runner\nwould spin up multiple containers).\n\nCo-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>",
+          "timestamp": "2026-03-29T23:53:31+03:00",
+          "tree_id": "17fe2436cd21d5fbcd79cf38d5ac7c9948b7db06",
+          "url": "https://github.com/fruch/cqlsh-rs/commit/ccbc5c0f45a7a6c7a524d0c202cf24bf255b45e8"
+        },
+        "date": 1774818926003,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "format_table/rows/10",
+            "value": 52263,
+            "unit": "ns"
+          },
+          {
+            "name": "format_table/rows/100",
+            "value": 509600,
+            "unit": "ns"
+          },
+          {
+            "name": "format_table/rows/1000",
+            "value": 5004900,
+            "unit": "ns"
+          },
+          {
+            "name": "format_expanded/rows/10",
+            "value": 6832,
+            "unit": "ns"
+          },
+          {
+            "name": "format_table/10",
+            "value": 38382,
+            "unit": "ns"
+          },
+          {
+            "name": "format_table/100",
+            "value": 360940,
+            "unit": "ns"
+          },
+          {
+            "name": "format_table/1000",
+            "value": 3672300,
+            "unit": "ns"
+          },
+          {
+            "name": "format_json_100",
+            "value": 29805,
+            "unit": "ns"
+          },
+          {
+            "name": "format_csv_100",
+            "value": 26797,
+            "unit": "ns"
+          },
+          {
+            "name": "format_each_type",
+            "value": 63433,
+            "unit": "ns"
+          },
+          {
+            "name": "parse_multiline/6_lines",
+            "value": 3731,
+            "unit": "ns"
+          },
+          {
+            "name": "classify_input/empty",
+            "value": 5,
+            "unit": "ns"
+          },
+          {
+            "name": "cli_parse_args/no_args",
+            "value": 16303,
+            "unit": "ns"
+          },
+          {
+            "name": "cli_validate/valid_full",
+            "value": 2,
+            "unit": "ns"
+          },
+          {
+            "name": "cqlshrc_parse/empty",
+            "value": 2848,
+            "unit": "ns"
+          },
+          {
+            "name": "cqlshrc_parse/minimal",
+            "value": 6277,
+            "unit": "ns"
+          },
+          {
+            "name": "cqlshrc_parse/full",
+            "value": 45074,
+            "unit": "ns"
+          },
+          {
+            "name": "config_merge/full_merge",
+            "value": 1124,
+            "unit": "ns"
+          },
+          {
+            "name": "end_to_end_startup/full",
+            "value": 96533,
             "unit": "ns"
           }
         ]
