@@ -1,0 +1,6 @@
+---
+source: tests/output_snapshots.rs
+assertion_line: 199
+expression: format_error(&err)
+---
+InvalidRequest: unconfigured table no_such_table

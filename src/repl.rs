@@ -298,9 +298,9 @@ fn dispatch_input<'a>(
         // Handle HELP [topic]
         if upper == "HELP" || upper == "?" || upper.starts_with("HELP ") {
             if let Some(topic) = upper.strip_prefix("HELP ") {
-                print_help_topic(topic.trim());
+                print_help_topic(topic.trim(), &mut std::io::stdout());
             } else {
-                print_help();
+                print_help(&mut std::io::stdout());
             }
             return;
         }
@@ -705,8 +705,9 @@ fn dispatch_input<'a>(
 }
 
 /// Print a basic help message matching Python cqlsh style.
-fn print_help() {
-    println!(
+pub fn print_help(writer: &mut dyn std::io::Write) {
+    writeln!(
+        writer,
         "\
 Documented shell commands:
   CAPTURE       Capture output to file
@@ -731,14 +732,15 @@ Partially implemented:
 
 CQL statements (executed via the database):
   SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, DROP, USE, etc."
-    );
+    )
+    .ok();
 }
 
 /// Print help for a specific topic.
 ///
 /// This is a stub — full per-topic help text will be added in a later phase.
 /// For now, print a message indicating the topic exists or is unknown.
-fn print_help_topic(topic: &str) {
+pub fn print_help_topic(topic: &str, writer: &mut dyn std::io::Write) {
     let shell_commands = [
         "CAPTURE",
         "CLEAR",
@@ -802,10 +804,14 @@ fn print_help_topic(topic: &str) {
 
     let upper = topic.to_uppercase();
     if shell_commands.contains(&upper.as_str()) || cql_topics.contains(&upper.as_str()) {
-        println!("Help topic: {upper}");
-        println!("(Detailed help text not yet implemented.)");
+        writeln!(writer, "Help topic: {upper}").ok();
+        writeln!(writer, "(Detailed help text not yet implemented.)").ok();
     } else {
-        println!("No help topic matching '{topic}'. Try HELP for a list of topics.");
+        writeln!(
+            writer,
+            "No help topic matching '{topic}'. Try HELP for a list of topics."
+        )
+        .ok();
     }
 }
 

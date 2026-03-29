@@ -125,6 +125,145 @@ pub fn print_expanded(result: &CqlResult, colorizer: &CqlColorizer, writer: &mut
     writeln!(writer).ok();
 }
 
+/// Format and print query results as a JSON array.
+///
+/// Each row becomes a JSON object mapping column names to values.
+/// Matches the format produced by Python cqlsh `--json`.
+/// NaN and Infinity float values are serialized as quoted strings since they
+/// are not valid JSON numbers.
+pub fn print_json(result: &CqlResult, writer: &mut dyn Write) {
+    use crate::driver::types::CqlValue;
+
+    if result.columns.is_empty() || result.rows.is_empty() {
+        writeln!(writer, "[]").ok();
+        return;
+    }
+
+    writeln!(writer, "[").ok();
+    let last_row = result.rows.len() - 1;
+    for (row_idx, row) in result.rows.iter().enumerate() {
+        write!(writer, "  {{").ok();
+        for (col_idx, col) in result.columns.iter().enumerate() {
+            if col_idx > 0 {
+                write!(writer, ", ").ok();
+            }
+            let val = row.get(col_idx).unwrap_or(&CqlValue::Null);
+            write!(
+                writer,
+                "\"{}\": {}",
+                json_escape_string(&col.name),
+                cql_value_to_json(val)
+            )
+            .ok();
+        }
+        if row_idx < last_row {
+            writeln!(writer, "}},").ok();
+        } else {
+            writeln!(writer, "}}").ok();
+        }
+    }
+    writeln!(writer, "]").ok();
+}
+
+/// Escape a string for use as a JSON string value (without surrounding quotes).
+fn json_escape_string(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            c if (c as u32) < 0x20 => out.push_str(&format!("\\u{:04x}", c as u32)),
+            c => out.push(c),
+        }
+    }
+    out
+}
+
+/// Serialize a CqlValue to a JSON token.
+fn cql_value_to_json(val: &crate::driver::types::CqlValue) -> String {
+    use crate::driver::types::CqlValue;
+    match val {
+        CqlValue::Null | CqlValue::Unset => "null".to_string(),
+        CqlValue::Boolean(b) => if *b { "true" } else { "false" }.to_string(),
+        CqlValue::Int(v) => v.to_string(),
+        CqlValue::BigInt(v) | CqlValue::Counter(v) => v.to_string(),
+        CqlValue::SmallInt(v) => v.to_string(),
+        CqlValue::TinyInt(v) => v.to_string(),
+        CqlValue::Float(v) => {
+            if v.is_finite() {
+                v.to_string()
+            } else {
+                format!("\"{}\"", val)
+            }
+        }
+        CqlValue::Double(v) => {
+            if v.is_finite() {
+                v.to_string()
+            } else {
+                format!("\"{}\"", val)
+            }
+        }
+        CqlValue::Decimal(v) => format!("\"{}\"", v),
+        CqlValue::Varint(v) => format!("\"{}\"", v),
+        CqlValue::Text(s) | CqlValue::Ascii(s) => {
+            format!("\"{}\"", json_escape_string(s))
+        }
+        CqlValue::Uuid(u) | CqlValue::TimeUuid(u) => format!("\"{}\"", u),
+        CqlValue::Inet(addr) => format!("\"{}\"", addr),
+        CqlValue::Blob(bytes) => {
+            let hex: String = bytes.iter().map(|b| format!("{b:02x}")).collect();
+            format!("\"0x{hex}\"")
+        }
+        CqlValue::Timestamp(_) | CqlValue::Date(_) | CqlValue::Time(_) => {
+            format!("\"{}\"", val)
+        }
+        CqlValue::Duration {
+            months,
+            days,
+            nanoseconds,
+        } => format!("\"{months}mo{days}d{nanoseconds}ns\""),
+        CqlValue::List(items) | CqlValue::Set(items) => {
+            let elems: Vec<String> = items.iter().map(cql_value_to_json).collect();
+            format!("[{}]", elems.join(", "))
+        }
+        CqlValue::Map(entries) => {
+            let pairs: Vec<String> = entries
+                .iter()
+                .map(|(k, v)| {
+                    let key = match k {
+                        CqlValue::Text(s) | CqlValue::Ascii(s) => {
+                            format!("\"{}\"", json_escape_string(s))
+                        }
+                        other => format!("\"{}\"", json_escape_string(&other.to_string())),
+                    };
+                    format!("{key}: {}", cql_value_to_json(v))
+                })
+                .collect();
+            format!("{{{}}}", pairs.join(", "))
+        }
+        CqlValue::Tuple(items) => {
+            let elems: Vec<String> = items
+                .iter()
+                .map(|opt| opt.as_ref().map_or("null".to_string(), cql_value_to_json))
+                .collect();
+            format!("[{}]", elems.join(", "))
+        }
+        CqlValue::UserDefinedType { fields, .. } => {
+            let pairs: Vec<String> = fields
+                .iter()
+                .map(|(name, v)| {
+                    let json_val = v.as_ref().map_or("null".to_string(), cql_value_to_json);
+                    format!("\"{}\": {json_val}", json_escape_string(name))
+                })
+                .collect();
+            format!("{{{}}}", pairs.join(", "))
+        }
+    }
+}
+
 /// Format tracing session output matching Python cqlsh style.
 ///
 /// Displays session metadata and a table of trace events sorted by elapsed time.

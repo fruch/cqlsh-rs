@@ -48,6 +48,8 @@ tempfile = "3"
 criterion = { version = "0.5", features = ["html_reports"] }
 testcontainers = { version = "0.27", features = ["blocking"] }
 tokio = { version = "1", features = ["full", "test-util"] }
+insta = { version = "1", features = ["yaml"] }
+proptest = "1"
 
 [[test]]
 name = "integration"

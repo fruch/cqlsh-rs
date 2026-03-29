@@ -1,0 +1,28 @@
+---
+source: tests/output_snapshots.rs
+assertion_line: 228
+expression: "String::from_utf8(buf).unwrap()"
+---
+Documented shell commands:
+  CAPTURE       Capture output to file
+  CLEAR         Clear the terminal screen
+  CONSISTENCY   Get/set consistency level
+  DEBUG         Toggle debug mode
+  DESCRIBE      Schema introspection (CLUSTER, KEYSPACES, TABLE, etc.)
+  EXIT / QUIT   Exit the shell
+  EXPAND        Toggle expanded (vertical) output
+  HELP          Show this help or help on a topic
+  LOGIN         Re-authenticate with new credentials
+  PAGING        Configure automatic paging
+  SERIAL        Get/set serial consistency level
+  SHOW          Show version, host, or session trace info
+  SOURCE        Execute CQL from a file
+  TRACING       Toggle request tracing
+  UNICODE       Show Unicode character handling info
+
+Partially implemented:
+  COPY TO       Export table data to CSV file
+  COPY FROM     Import CSV data into a table
+
+CQL statements (executed via the database):
+  SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, DROP, USE, etc.

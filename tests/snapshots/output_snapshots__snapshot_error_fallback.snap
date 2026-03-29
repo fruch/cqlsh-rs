@@ -1,0 +1,6 @@
+---
+source: tests/output_snapshots.rs
+assertion_line: 217
+expression: format_error(&err)
+---
+ServerError: table foo does not exist

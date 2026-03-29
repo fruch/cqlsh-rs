@@ -1,0 +1,6 @@
+---
+source: tests/output_snapshots.rs
+assertion_line: 242
+expression: "String::from_utf8(buf).unwrap()"
+---
+No help topic matching 'FOOBAR'. Try HELP for a list of topics.
