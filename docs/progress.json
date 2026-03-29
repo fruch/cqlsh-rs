@@ -14,7 +14,8 @@
       { "date": "2026-03-22", "tasks_done": 21, "phase": 3, "pr": "#24" },
       { "date": "2026-03-26", "tasks_done": 6, "phase": 5, "pr": "SP19" },
       { "date": "2026-03-29", "tasks_done": 5, "phase": 4, "pr": "#TBD" },
-      { "date": "2026-03-29", "tasks_done": 3, "phase": 5, "pr": "SP11-benches" }
+      { "date": "2026-03-29", "tasks_done": 3, "phase": 5, "pr": "SP11-benches" },
+      { "date": "2026-03-29", "tasks_done": 6, "phase": 4, "pr": null }
     ]
   },
   "phases": [
@@ -53,7 +54,7 @@
       "name": "COPY & Advanced",
       "description": "COPY TO/FROM, remaining DESCRIBE, batch",
       "total_tasks": 24,
-      "completed_tasks": 5,
+      "completed_tasks": 11,
       "status": "in_progress",
       "started_date": "2026-03-29",
       "completed_date": null
