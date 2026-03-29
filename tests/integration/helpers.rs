@@ -15,8 +15,9 @@ const CQL_PORT: u16 = 9042;
 
 /// A running ScyllaDB container with its mapped port.
 pub struct ScyllaContainer {
-    /// The container handle — dropped when this struct is dropped.
-    _container: Container<GenericImage>,
+    /// The container handle — kept alive for the process lifetime.
+    /// `None` when connecting to a pre-existing instance via env vars.
+    _container: Option<Container<GenericImage>>,
     /// The host port mapped to the CQL native transport port.
     pub port: u16,
     /// The host address (always 127.0.0.1 for local Docker).
@@ -45,6 +46,17 @@ pub fn get_scylla() -> &'static ScyllaContainer {
 }
 
 fn start_scylla() -> StartResult {
+    // TODO: temporary CI workaround — if SCYLLA_TEST_HOST/PORT are set (injected by
+    // the GitHub Actions "Start ScyllaDB" step), skip testcontainers and connect
+    // directly. Remove once testcontainers-rs works on GitHub Actions runners.
+    if let Ok(host) = std::env::var("SCYLLA_TEST_HOST") {
+        let port = std::env::var("SCYLLA_TEST_PORT")
+            .ok()
+            .and_then(|p| p.parse().ok())
+            .unwrap_or(CQL_PORT);
+        return Ok(ScyllaContainer { _container: None, port, host });
+    }
+
     let container = GenericImage::new("scylladb/scylla", "6.2")
         .with_wait_for(WaitFor::message_on_stderr("serving"))
         .with_exposed_port(CQL_PORT.tcp())
@@ -75,7 +87,7 @@ fn start_scylla() -> StartResult {
     std::thread::sleep(Duration::from_secs(5));
 
     Ok(ScyllaContainer {
-        _container: container,
+        _container: Some(container),
         port,
         host,
     })
