@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774818926493,
+  "lastUpdate": 1774819250016,
   "repoUrl": "https://github.com/fruch/cqlsh-rs",
   "entries": {
     "Benchmark": [
@@ -3169,6 +3169,125 @@ window.BENCHMARK_DATA = {
           {
             "name": "end_to_end_startup/full",
             "value": 96533,
+            "unit": "ns"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fruch@scylladb.com",
+            "name": "Israel Fruchter",
+            "username": "fruch"
+          },
+          "committer": {
+            "email": "fruch@scylladb.com",
+            "name": "Israel Fruchter",
+            "username": "fruch"
+          },
+          "distinct": true,
+          "id": "cfbc051d5a36f16eecd0af1b8c5d9916567f743d",
+          "message": "fix(test): cache container start failure in OnceLock to prevent retry storms\n\nOnceLock::get_or_init does not cache a panic — if the init closure\npanics, the lock stays uninitialized and the next test retries from\nscratch. With --test-threads=1 this caused every one of the 63 tests\nto attempt its own container start in sequence, each leaving partial\niptables rules that blocked the next attempt with \"address already\nin use\".\n\nSwitching to OnceLock<Result<…>> ensures the error is stored on the\nfirst failure, so all subsequent tests see the cached Err immediately\nwithout touching Docker again.\n\nCo-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>",
+          "timestamp": "2026-03-29T23:58:48+03:00",
+          "tree_id": "c777239acdedb4daa418991e99c6bca48f1d5923",
+          "url": "https://github.com/fruch/cqlsh-rs/commit/cfbc051d5a36f16eecd0af1b8c5d9916567f743d"
+        },
+        "date": 1774819249592,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "format_table/rows/10",
+            "value": 52064,
+            "unit": "ns"
+          },
+          {
+            "name": "format_table/rows/100",
+            "value": 506660,
+            "unit": "ns"
+          },
+          {
+            "name": "format_table/rows/1000",
+            "value": 5049100,
+            "unit": "ns"
+          },
+          {
+            "name": "format_expanded/rows/10",
+            "value": 6834,
+            "unit": "ns"
+          },
+          {
+            "name": "format_table/10",
+            "value": 38092,
+            "unit": "ns"
+          },
+          {
+            "name": "format_table/100",
+            "value": 367410,
+            "unit": "ns"
+          },
+          {
+            "name": "format_table/1000",
+            "value": 3686800,
+            "unit": "ns"
+          },
+          {
+            "name": "format_json_100",
+            "value": 28413,
+            "unit": "ns"
+          },
+          {
+            "name": "format_csv_100",
+            "value": 26915,
+            "unit": "ns"
+          },
+          {
+            "name": "format_each_type",
+            "value": 63873,
+            "unit": "ns"
+          },
+          {
+            "name": "parse_multiline/6_lines",
+            "value": 3690,
+            "unit": "ns"
+          },
+          {
+            "name": "classify_input/empty",
+            "value": 5,
+            "unit": "ns"
+          },
+          {
+            "name": "cli_parse_args/no_args",
+            "value": 16190,
+            "unit": "ns"
+          },
+          {
+            "name": "cli_validate/valid_full",
+            "value": 2,
+            "unit": "ns"
+          },
+          {
+            "name": "cqlshrc_parse/empty",
+            "value": 2794,
+            "unit": "ns"
+          },
+          {
+            "name": "cqlshrc_parse/minimal",
+            "value": 6108,
+            "unit": "ns"
+          },
+          {
+            "name": "cqlshrc_parse/full",
+            "value": 44387,
+            "unit": "ns"
+          },
+          {
+            "name": "config_merge/full_merge",
+            "value": 1145,
+            "unit": "ns"
+          },
+          {
+            "name": "end_to_end_startup/full",
+            "value": 98421,
             "unit": "ns"
           }
         ]
