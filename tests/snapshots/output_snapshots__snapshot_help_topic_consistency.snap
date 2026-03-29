@@ -1,0 +1,7 @@
+---
+source: tests/output_snapshots.rs
+assertion_line: 235
+expression: "String::from_utf8(buf).unwrap()"
+---
+Help topic: CONSISTENCY
+(Detailed help text not yet implemented.)

@@ -1,0 +1,32 @@
+---
+source: tests/output_snapshots.rs
+assertion_line: 149
+expression: capture_expanded(&result)
+---
+
+@ Row 1
+--------------
+   id | 1
+ name | User1
+
+@ Row 2
+--------------
+   id | 2
+ name | User2
+
+@ Row 3
+--------------
+   id | 3
+ name | User3
+
+@ Row 4
+--------------
+   id | 4
+ name | User4
+
+@ Row 5
+--------------
+   id | 5
+ name | User5
+
+(5 rows)

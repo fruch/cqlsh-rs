@@ -1,0 +1,12 @@
+---
+source: tests/output_snapshots.rs
+assertion_line: 171
+expression: capture_json(&result)
+---
+[
+  {"id": 1, "label": "label-1", "score": 1.5, "active": false, "token": "00000000-0000-0000-0000-000000000000", "note": "note-1"},
+  {"id": 2, "label": "label-2", "score": 3, "active": true, "token": "00000000-0000-0000-0000-000000000000", "note": "note-2"},
+  {"id": 3, "label": "label-3", "score": 4.5, "active": false, "token": "00000000-0000-0000-0000-000000000000", "note": null},
+  {"id": 4, "label": "label-4", "score": 6, "active": true, "token": "00000000-0000-0000-0000-000000000000", "note": "note-4"},
+  {"id": 5, "label": "label-5", "score": 7.5, "active": false, "token": "00000000-0000-0000-0000-000000000000", "note": "note-5"}
+]

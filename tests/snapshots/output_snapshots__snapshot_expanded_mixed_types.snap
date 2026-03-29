@@ -1,0 +1,52 @@
+---
+source: tests/output_snapshots.rs
+assertion_line: 155
+expression: capture_expanded(&result)
+---
+
+@ Row 1
+----------------
+     id | 1
+  label | label-1
+  score | 1.5
+ active | False
+  token | 00000000-0000-0000-0000-000000000000
+   note | note-1
+
+@ Row 2
+----------------
+     id | 2
+  label | label-2
+  score | 3
+ active | True
+  token | 00000000-0000-0000-0000-000000000000
+   note | note-2
+
+@ Row 3
+----------------
+     id | 3
+  label | label-3
+  score | 4.5
+ active | False
+  token | 00000000-0000-0000-0000-000000000000
+   note | null
+
+@ Row 4
+----------------
+     id | 4
+  label | label-4
+  score | 6
+ active | True
+  token | 00000000-0000-0000-0000-000000000000
+   note | note-4
+
+@ Row 5
+----------------
+     id | 5
+  label | label-5
+  score | 7.5
+ active | False
+  token | 00000000-0000-0000-0000-000000000000
+   note | note-5
+
+(5 rows)

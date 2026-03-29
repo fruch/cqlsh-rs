@@ -1,0 +1,6 @@
+---
+source: tests/output_snapshots.rs
+assertion_line: 211
+expression: format_error(&err)
+---
+Unauthorized: User anonymous has no SELECT permission on table system.users
