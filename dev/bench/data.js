@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774731848530,
+  "lastUpdate": 1774809954161,
   "repoUrl": "https://github.com/fruch/cqlsh-rs",
   "entries": {
     "Benchmark": [
@@ -2842,6 +2842,95 @@ window.BENCHMARK_DATA = {
           {
             "name": "end_to_end_startup/full",
             "value": 97638,
+            "unit": "ns"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fruch@scylladb.com",
+            "name": "Israel Fruchter",
+            "username": "fruch"
+          },
+          "committer": {
+            "email": "israel.fruchter@gmail.com",
+            "name": "Israel Fruchter",
+            "username": "fruch"
+          },
+          "distinct": true,
+          "id": "db826b3601a7019366593c0ec12738518103e3dd",
+          "message": "feat(shell): Phase 4.1 non-interactive mode & shell improvements\n\n- Add stdin pipe/redirect detection: when stdin is not a TTY and --tty\n  is not set, skip the REPL and read CQL statements line-by-line\n- --tty flag now forces interactive REPL even when stdin is piped\n- Fix connection error exit code: 1 → 2 (distinct from CQL error = 1)\n- Suppress connection banner in stdin pipe mode\n- Extract execute_cql_reader<R: BufRead> generic, shared by -f and stdin\n- Add DEBUG/UNICODE handlers to non-interactive execution path so they\n  work correctly in -e, -f, and piped-stdin modes\n- Add 4 no-Docker CLI tests (exit code 2, --tty, stdin pipe)\n- Add 8 Docker integration tests for DEBUG, UNICODE, and stdin pipe mode\n- Update docs/progress.json: Phase 4 in_progress, 5 tasks completed\n\nCloses tasks 4.1.3, 4.1.4, 4.1.8, 4.1.9, 4.1.10\n\nCo-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>",
+          "timestamp": "2026-03-29T21:24:57+03:00",
+          "tree_id": "144ff4c8d46ad37d8db6b435a53a4b0d6a0ea70a",
+          "url": "https://github.com/fruch/cqlsh-rs/commit/db826b3601a7019366593c0ec12738518103e3dd"
+        },
+        "date": 1774809953859,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "format_table/rows/10",
+            "value": 51831,
+            "unit": "ns"
+          },
+          {
+            "name": "format_table/rows/100",
+            "value": 501280,
+            "unit": "ns"
+          },
+          {
+            "name": "format_table/rows/1000",
+            "value": 5027600,
+            "unit": "ns"
+          },
+          {
+            "name": "format_expanded/rows/10",
+            "value": 6667,
+            "unit": "ns"
+          },
+          {
+            "name": "parse_multiline/6_lines",
+            "value": 3786,
+            "unit": "ns"
+          },
+          {
+            "name": "classify_input/empty",
+            "value": 5,
+            "unit": "ns"
+          },
+          {
+            "name": "cli_parse_args/no_args",
+            "value": 16497,
+            "unit": "ns"
+          },
+          {
+            "name": "cli_validate/valid_full",
+            "value": 2,
+            "unit": "ns"
+          },
+          {
+            "name": "cqlshrc_parse/empty",
+            "value": 2797,
+            "unit": "ns"
+          },
+          {
+            "name": "cqlshrc_parse/minimal",
+            "value": 6025,
+            "unit": "ns"
+          },
+          {
+            "name": "cqlshrc_parse/full",
+            "value": 43810,
+            "unit": "ns"
+          },
+          {
+            "name": "config_merge/full_merge",
+            "value": 1104,
+            "unit": "ns"
+          },
+          {
+            "name": "end_to_end_startup/full",
+            "value": 97567,
             "unit": "ns"
           }
         ]
