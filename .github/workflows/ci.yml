@@ -53,14 +53,20 @@ jobs:
           retention-days: 5
 
   test:
-    name: Tests
-    runs-on: ubuntu-latest
+    name: Tests (${{ matrix.os }}, ${{ matrix.rust }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        rust: [stable, beta]
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@${{ matrix.rust }}
       - uses: Swatinem/rust-cache@v2
       - uses: taiki-e/install-action@nextest
       - name: Run tests
+        shell: bash
         run: |
           set -o pipefail
           cargo nextest run --all-targets --all-features 2>&1 | tee test-output.log
@@ -68,28 +74,52 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: test-results
+          name: test-results-${{ matrix.os }}-${{ matrix.rust }}
           path: test-output.log
           retention-days: 5
 
-  integration:
-    name: Integration Tests
+  build:
+    name: Build (${{ matrix.os }}, ${{ matrix.rust }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        rust: [stable, beta]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@${{ matrix.rust }}
+      - uses: Swatinem/rust-cache@v2
+      - name: Build release
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo build --release --message-format=json 2>&1 | tee build-output.json
+      - name: Upload build results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-results-${{ matrix.os }}-${{ matrix.rust }}
+          path: build-output.json
+          retention-days: 5
+
+  integration-scylladb:
+    name: Integration Tests (ScyllaDB 6.0)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      # TODO: temporary workaround — testcontainers-rs fails to start containers on
-      # GitHub Actions (Ubuntu 24.04 / Docker 27) due to Docker's networking driver
+      # Temporary workaround: testcontainers-rs fails to start containers on
+      # GitHub Actions (Ubuntu 24.04 / Docker 27) due to Docker networking driver
       # failing with "address already in use" when setting up port forwarding.
-      # Goal is to restore plain `cargo test` with testcontainers managing the
-      # ScyllaDB lifecycle once the root cause is identified and fixed.
+      # Goal: restore plain `cargo test` with testcontainers once root cause is fixed.
       # Tracked: https://github.com/fruch/cqlsh-rs/issues/TODO
       - name: Start ScyllaDB
         run: |
           docker run -d --name scylladb \
             -p 9042:9042 \
-            scylladb/scylla:6.2 \
+            scylladb/scylla:6.0 \
             --smp 1 --memory 512M --overprovisioned 1 --skip-wait-for-gossip-to-settle 0
           echo "Waiting for ScyllaDB to be ready..."
           for i in $(seq 1 30); do
@@ -110,31 +140,92 @@ jobs:
           SCYLLA_TEST_PORT: "9042"
         run: |
           set -o pipefail
-          cargo test --test integration -- --ignored --test-threads=1 2>&1 | tee integration-output.log
+          cargo test --test integration -- --ignored --test-threads=1 2>&1 | tee integration-scylladb-output.log
         timeout-minutes: 15
       - name: Upload integration test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: integration-test-results
-          path: integration-output.log
+          name: integration-scylladb-results
+          path: integration-scylladb-output.log
           retention-days: 5
 
-  build:
-    name: Build
+  integration-cassandra:
+    name: Integration Tests (Cassandra 4.1)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - name: Build release
+        with:
+          key: cassandra
+      - name: Start Cassandra 4.1
+        run: |
+          docker run -d --name cassandra \
+            -p 9042:9042 \
+            -e CASSANDRA_CLUSTER_NAME=test_cluster \
+            cassandra:4.1
+          echo "Waiting for Cassandra to be ready (may take up to 5 minutes)..."
+          for i in $(seq 1 60); do
+            if docker exec cassandra cqlsh -e "SELECT now() FROM system.local;" 2>/dev/null; then
+              echo "Cassandra ready after ${i} attempt(s)"
+              break
+            fi
+            if [ "$i" -eq 60 ]; then
+              echo "Cassandra failed to become ready"
+              docker logs cassandra
+              exit 1
+            fi
+            sleep 5
+          done
+      - name: Run integration tests
+        env:
+          SCYLLA_TEST_HOST: localhost
+          SCYLLA_TEST_PORT: "9042"
         run: |
           set -o pipefail
-          cargo build --release --message-format=json 2>&1 | tee build-output.json
-      - name: Upload build results
+          cargo test --test integration -- --ignored --test-threads=1 2>&1 | tee integration-cassandra-output.log
+        timeout-minutes: 20
+      - name: Upload integration test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: build-results
-          path: build-output.json
+          name: integration-cassandra-results
+          path: integration-cassandra-output.log
           retention-days: 5
+
+  coverage:
+    name: Code Coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: coverage
+      - name: Install cargo-tarpaulin
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-tarpaulin
+      - name: Run coverage
+        run: |
+          cargo tarpaulin \
+            --all-features \
+            --workspace \
+            --timeout 120 \
+            --out xml \
+            --output-dir coverage/
+        timeout-minutes: 20
+      - name: Upload to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: coverage/cobertura.xml
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/
+          retention-days: 30
