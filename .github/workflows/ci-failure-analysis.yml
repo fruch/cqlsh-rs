@@ -1,8 +1,14 @@
 name: CI Failure Analysis
 
-# Analyzes CI failures using Claude AI and posts a structured PR comment.
+# Analyzes CI failures using Gemini 2.5 Flash (free tier) and posts a
+# structured PR comment with root cause, suggested fix, and flaky detection.
 # Triggered by workflow_run after the CI workflow completes with a failure.
-# Requires ANTHROPIC_API_KEY secret for Claude Haiku access.
+#
+# Requires GEMINI_API_KEY secret (free from https://aistudio.google.com/apikey).
+#
+# Alternative backends (set via repository variables):
+#   CI_ANALYZER_BACKEND=claude  → uses anthropics/claude-code-action (~$0.005/run, needs ANTHROPIC_API_KEY)
+#   CI_ANALYZER_BACKEND=gemini  → default, uses google-github-actions/run-gemini-cli (free tier)
 
 on:
   workflow_run:
@@ -89,91 +95,127 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # Analyze failures with Claude Haiku (~$0.005 per run)
-      - name: Analyze CI failure
-        id: analyze
+      # Prepare the shared analysis prompt (used by both backends)
+      - name: Prepare analysis prompt
+        id: prompt
+        run: |
+          cat > /tmp/ci-analysis-prompt.md <<'PROMPT_EOF'
+          Analyze the CI failure for this pull request.
+
+          REPO: ${{ github.repository }}
+          PR NUMBER: ${{ steps.pr.outputs.number }}
+          FAILED WORKFLOW RUN: ${{ github.event.workflow_run.id }}
+          HEAD SHA: ${{ github.event.workflow_run.head_sha }}
+
+          Follow these steps:
+
+          1. Fetch failed job logs:
+             gh run view ${{ github.event.workflow_run.id }} --log-failed
+
+          2. If ci-artifacts/test-results.xml exists, read it for structured
+             JUnit test failure data (XML format from cargo-nextest).
+
+          3. If ci-artifacts/clippy-output.json exists, read it for structured
+             Clippy diagnostics (look for entries with "reason": "compiler-message").
+
+          4. If ci-artifacts/build-output.json exists, read it for compilation errors.
+
+          5. If ci-artifacts/fmt-output.txt exists, read it for formatting issues.
+
+          6. If failure-history/ directory has JSON files, read up to 5 of them
+             to detect recurring issues: same test name or error appearing in
+             multiple runs.
+
+          7. For each failed job, determine:
+             - The exact error message (first 200 chars)
+             - The root cause (why it failed, be specific)
+             - A suggested fix with file:line references where possible
+             - A classification from: compilation_error, test_failure,
+               lint_violation, infrastructure_flaky, dependency_issue,
+               configuration_error, unknown
+
+          8. Assess flakiness: does this look like a timing/infrastructure issue
+             (testcontainer startup, network timeout, resource contention)?
+             Provide confidence 0.0-1.0.
+
+          9. Report recurring patterns: any issue seen in 2+ of the last 5 runs.
+
+          Return ONLY a JSON object matching this exact schema (no markdown fences, no other text):
+          {
+            "summary": "string - one-line overall summary",
+            "total_jobs": integer,
+            "failed_jobs": integer,
+            "is_flaky": boolean,
+            "flaky_confidence": number (0.0-1.0),
+            "failures": [
+              {
+                "job_name": "string",
+                "test_name": "string (optional, omit if not a test failure)",
+                "error_message": "string (first 200 chars)",
+                "root_cause": "string",
+                "suggested_fix": "string",
+                "file_reference": "string (optional, e.g. src/foo.rs:42)",
+                "classification": "one of: compilation_error | test_failure | lint_violation | infrastructure_flaky | dependency_issue | configuration_error | unknown"
+              }
+            ],
+            "recurring_issues": [
+              {
+                "issue": "string",
+                "occurrences": integer,
+                "category": "string",
+                "pattern": "string (optional)",
+                "recommendation": "string"
+              }
+            ]
+          }
+          PROMPT_EOF
+
+      # --- Backend: Gemini (default, free tier) ---
+      - name: Analyze CI failure (Gemini)
+        id: analyze-gemini
+        if: vars.CI_ANALYZER_BACKEND != 'claude'
+        uses: google-github-actions/run-gemini-cli@v1
+        with:
+          prompt_file: /tmp/ci-analysis-prompt.md
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+
+      # --- Backend: Claude (opt-in via CI_ANALYZER_BACKEND=claude) ---
+      - name: Analyze CI failure (Claude)
+        id: analyze-claude
+        if: vars.CI_ANALYZER_BACKEND == 'claude'
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           model: claude-haiku-4-5-20251001
           allowed_tools: "Bash(gh run view:*),Bash(gh api:*),Bash(cat:*),Bash(ls:*),Read"
           output_format: json
-          prompt: |
-            REPO: ${{ github.repository }}
-            PR NUMBER: ${{ steps.pr.outputs.number }}
-            FAILED WORKFLOW RUN: ${{ github.event.workflow_run.id }}
-            HEAD SHA: ${{ github.event.workflow_run.head_sha }}
+          prompt_file: /tmp/ci-analysis-prompt.md
 
-            Analyze the CI failure for this pull request. Follow these steps:
-
-            1. Fetch failed job logs:
-               gh run view ${{ github.event.workflow_run.id }} --log-failed
-
-            2. If ci-artifacts/test-results.xml exists, read it for structured
-               JUnit test failure data.
-
-            3. If ci-artifacts/clippy-output.json exists, read it for structured
-               Clippy diagnostics (look for entries with "reason": "compiler-message").
-
-            4. If ci-artifacts/build-output.json exists, read it for compilation
-               errors.
-
-            5. If ci-artifacts/fmt-output.txt exists, read it for formatting issues.
-
-            6. If failure-history/ directory has JSON files, read up to 5 of them
-               to detect recurring issues: same test name or error appearing in
-               multiple runs.
-
-            7. For each failed job, determine:
-               - The exact error message (first 200 chars)
-               - The root cause (why it failed, be specific)
-               - A suggested fix with file:line references where possible
-               - A classification from: compilation_error, test_failure,
-                 lint_violation, infrastructure_flaky, dependency_issue,
-                 configuration_error, unknown
-
-            8. Assess flakiness: does this look like a timing/infrastructure issue
-               (testcontainer startup, network timeout, resource contention)?
-               Provide confidence 0.0–1.0.
-
-            9. Report recurring patterns: any issue seen in 2+ of the last 5 runs.
-
-            Return ONLY a JSON object matching this exact schema (no other text):
-            {
-              "summary": "string — one-line overall summary",
-              "total_jobs": integer,
-              "failed_jobs": integer,
-              "is_flaky": boolean,
-              "flaky_confidence": number (0.0–1.0),
-              "failures": [
-                {
-                  "job_name": "string",
-                  "test_name": "string (optional)",
-                  "error_message": "string",
-                  "root_cause": "string",
-                  "suggested_fix": "string",
-                  "file_reference": "string (optional, e.g. src/foo.rs:42)",
-                  "classification": "one of: compilation_error | test_failure | lint_violation | infrastructure_flaky | dependency_issue | configuration_error | unknown"
-                }
-              ],
-              "recurring_issues": [
-                {
-                  "issue": "string",
-                  "occurrences": integer,
-                  "category": "string",
-                  "pattern": "string (optional)",
-                  "recommendation": "string"
-                }
-              ]
-            }
+      # Unify outputs from whichever backend ran
+      - name: Collect analysis output
+        id: analyze
+        run: |
+          if [ "${{ vars.CI_ANALYZER_BACKEND }}" = "claude" ]; then
+            OUTPUT='${{ steps.analyze-claude.outputs.output }}'
+          else
+            OUTPUT='${{ steps.analyze-gemini.outputs.output }}'
+          fi
+          # Strip markdown code fences if present (Gemini sometimes wraps in ```json)
+          OUTPUT=$(echo "$OUTPUT" | sed '/^```/d')
+          echo "output<<ANALYSIS_EOF" >> "$GITHUB_OUTPUT"
+          echo "$OUTPUT" >> "$GITHUB_OUTPUT"
+          echo "ANALYSIS_EOF" >> "$GITHUB_OUTPUT"
 
       # Format and post (or update) the collapsed PR comment
       - name: Post failure summary comment
         if: steps.pr.outputs.number != ''
         uses: actions/github-script@v7
+        env:
+          ANALYSIS_OUTPUT: ${{ steps.analyze.outputs.output }}
         with:
           script: |
-            const raw = `${{ steps.analyze.outputs.output }}`;
+            const raw = process.env.ANALYSIS_OUTPUT;
             if (!raw || raw.trim() === '') {
               console.log('No output from analysis step — skipping comment');
               return;
@@ -189,6 +231,7 @@ jobs:
             }
 
             const runUrl = `https://github.com/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}`;
+            const backend = `${{ vars.CI_ANALYZER_BACKEND }}` === 'claude' ? 'Claude' : 'Gemini';
 
             const classEmoji = {
               compilation_error:    '🔨',
@@ -253,7 +296,7 @@ jobs:
             }
 
             body += `---\n`;
-            body += `*🤖 Generated by [Claude CI Analyzer](https://github.com/anthropics/claude-code-action) • [Re-run failed jobs](${runUrl})*\n`;
+            body += `*🤖 Analyzed by ${backend} • [Re-run failed jobs](${runUrl})*\n`;
 
             // Deduplicate: update existing bot comment rather than posting a new one
             const prNumber = parseInt(`${{ steps.pr.outputs.number }}`, 10);
@@ -290,12 +333,17 @@ jobs:
       - name: Save failure history
         if: always()
         run: |
-          echo '${{ steps.analyze.outputs.output }}' | \
-            jq --arg run "${{ github.event.workflow_run.run_number }}" \
-               --arg sha "${{ github.event.workflow_run.head_sha }}" \
-               --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-               '. + {"run_number": ($run | tonumber), "timestamp": $ts, "sha": $sha}' \
-            > failure-summary.json 2>/dev/null || echo '{"run_number":0,"timestamp":"","sha":""}' > failure-summary.json
+          ANALYSIS='${{ steps.analyze.outputs.output }}'
+          if [ -n "$ANALYSIS" ]; then
+            echo "$ANALYSIS" | \
+              jq --arg run "${{ github.event.workflow_run.run_number }}" \
+                 --arg sha "${{ github.event.workflow_run.head_sha }}" \
+                 --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+                 '. + {"run_number": ($run | tonumber), "timestamp": $ts, "sha": $sha}' \
+              > failure-summary.json 2>/dev/null || echo '{}' > failure-summary.json
+          else
+            echo '{}' > failure-summary.json
+          fi
         continue-on-error: true
 
       - name: Upload failure history
@@ -306,7 +354,7 @@ jobs:
           path: failure-summary.json
           retention-days: 30
 
-      # Auto-retry failed jobs when Claude detects a high-confidence flaky failure
+      # Auto-retry failed jobs when AI detects a high-confidence flaky failure
       - name: Auto-retry if flaky
         if: >
           steps.analyze.outputs.output != '' &&
