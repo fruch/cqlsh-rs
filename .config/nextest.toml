@@ -1,0 +1,13 @@
+# cargo-nextest configuration
+# https://nexte.st/docs/configuration/reference/
+
+[profile.default.junit]
+path = "target/nextest/junit.xml"
+store-success-output = false
+store-failure-output = true
+
+# CI profile: same JUnit output, used in GitHub Actions
+[profile.ci.junit]
+path = "test-results.xml"
+store-success-output = false
+store-failure-output = true

@@ -1,8 +1,12 @@
 name: CI Failure Analysis
 
-# Analyzes CI failures and posts a structured PR comment with diagnostics.
-# Uses pure pattern-matching on cargo/clippy/nextest output — no LLM required.
-# Logic lives in .github/scripts/analyze-ci-failures.sh for testability.
+# Analyzes CI failures and posts a structured, collapsed PR comment.
+# Triggered by workflow_run after the CI workflow completes with a failure.
+#
+# Three backends (set via CI_ANALYZER_BACKEND repository variable):
+#   simple  — default, no API key needed, pattern-matching on CI artifacts
+#   gemini  — Gemini 2.5 Flash free tier, needs GEMINI_API_KEY (free)
+#   claude  — Claude Haiku (~$0.005/run), needs ANTHROPIC_API_KEY
 
 on:
   workflow_run:
@@ -19,13 +23,15 @@ jobs:
       contents: read
       pull-requests: write
       actions: read
+      checks: read
+      id-token: write
 
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
 
-      # Download artifacts from the failed CI run
+      # Download CI artifacts from the failed run
       - name: Download test results
         uses: actions/download-artifact@v4
         with:
@@ -62,74 +68,292 @@ jobs:
           path: ci-artifacts/
         continue-on-error: true
 
-      # Get the PR number
+      - name: Download integration test results
+        uses: actions/download-artifact@v4
+        with:
+          name: integration-test-results
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: ci-artifacts/
+        continue-on-error: true
+
+      # Download recent failure history for recurring issue detection
+      - name: Download failure history
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          workflow: ci-failure-analysis.yml
+          branch: ${{ github.event.workflow_run.head_branch }}
+          name: ci-failure-.*
+          name_is_regexp: true
+          path: failure-history/
+          if_no_artifact_found: warn
+        continue-on-error: true
+
+      # Resolve PR number from the triggering commit SHA
       - name: Get PR number
         id: pr
         run: |
-          PR_NUMBER=$(gh api repos/${{ github.repository }}/commits/${{ github.event.workflow_run.head_sha }}/pulls --jq '.[0].number')
+          PR_NUMBER=$(gh api "repos/${{ github.repository }}/commits/${{ github.event.workflow_run.head_sha }}/pulls" \
+            --jq '.[0].number // empty')
           echo "number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # Get failed job names
+      # Get failed job names for the simple backend
       - name: Get failed jobs
         id: failed-jobs
         run: |
           gh run view ${{ github.event.workflow_run.id }} --json jobs \
             --jq '.jobs[] | select(.conclusion == "failure") | .name' \
-            > failed-jobs.txt
+            > failed-jobs.txt || true
           echo "Failed jobs:"
           cat failed-jobs.txt
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # Run the analysis script
-      - name: Analyze failures
-        id: analyze
+      # ── Backend: simple (default, no API key) ──
+      # Outputs markdown directly — no JSON intermediary
+      - name: Analyze CI failure (simple)
+        id: analyze-simple
+        if: vars.CI_ANALYZER_BACKEND != 'gemini' && vars.CI_ANALYZER_BACKEND != 'claude'
         run: |
-          {
-            echo "comment<<COMMENT_EOF"
-            bash .github/scripts/analyze-ci-failures.sh \
-              ci-artifacts \
-              failed-jobs.txt \
-              "${{ github.repository }}" \
-              "${{ github.event.workflow_run.id }}"
-            echo "COMMENT_EOF"
-          } >> "$GITHUB_OUTPUT"
+          bash .github/scripts/analyze-ci-failures.sh \
+            ci-artifacts \
+            failed-jobs.txt \
+            "${{ github.repository }}" \
+            "${{ github.event.workflow_run.id }}" \
+            > /tmp/ci-comment-body.md
+          echo "format=markdown" >> "$GITHUB_OUTPUT"
 
-      # Post or update PR comment
+      # ── Backend: gemini (free tier, needs GEMINI_API_KEY) ──
+      - name: Prepare AI prompt
+        id: prompt
+        if: vars.CI_ANALYZER_BACKEND == 'gemini' || vars.CI_ANALYZER_BACKEND == 'claude'
+        run: |
+          cat > /tmp/ci-analysis-prompt.md <<'PROMPT_EOF'
+          Analyze the CI failure for this pull request.
+
+          REPO: ${{ github.repository }}
+          PR NUMBER: ${{ steps.pr.outputs.number }}
+          FAILED WORKFLOW RUN: ${{ github.event.workflow_run.id }}
+          HEAD SHA: ${{ github.event.workflow_run.head_sha }}
+
+          Follow these steps:
+
+          1. Fetch failed job logs:
+             gh run view ${{ github.event.workflow_run.id }} --log-failed
+
+          2. If ci-artifacts/test-results.xml exists, read it for structured
+             JUnit test failure data (XML format from cargo-nextest).
+
+          3. If ci-artifacts/clippy-output.json exists, read it for structured
+             Clippy diagnostics (look for entries with "reason": "compiler-message").
+
+          4. If ci-artifacts/build-output.json exists, read it for compilation errors.
+
+          5. If ci-artifacts/fmt-output.txt exists, read it for formatting issues.
+
+          6. If failure-history/ directory has JSON files, read up to 5 of them
+             to detect recurring issues: same test name or error appearing in
+             multiple runs.
+
+          7. For each failed job, determine:
+             - The exact error message (first 200 chars)
+             - The root cause (why it failed, be specific)
+             - A suggested fix with file:line references where possible
+             - A classification from: compilation_error, test_failure,
+               lint_violation, infrastructure_flaky, dependency_issue,
+               configuration_error, unknown
+
+          8. Assess flakiness: does this look like a timing/infrastructure issue
+             (testcontainer startup, network timeout, resource contention)?
+             Provide confidence 0.0-1.0.
+
+          9. Report recurring patterns: any issue seen in 2+ of the last 5 runs.
+
+          Return ONLY a JSON object matching this exact schema (no markdown fences, no other text):
+          {
+            "summary": "string - one-line overall summary",
+            "total_jobs": integer,
+            "failed_jobs": integer,
+            "is_flaky": boolean,
+            "flaky_confidence": number (0.0-1.0),
+            "failures": [
+              {
+                "job_name": "string",
+                "test_name": "string (optional, omit if not a test failure)",
+                "error_message": "string (first 200 chars)",
+                "root_cause": "string",
+                "suggested_fix": "string",
+                "file_reference": "string (optional, e.g. src/foo.rs:42)",
+                "classification": "one of: compilation_error | test_failure | lint_violation | infrastructure_flaky | dependency_issue | configuration_error | unknown"
+              }
+            ],
+            "recurring_issues": [
+              {
+                "issue": "string",
+                "occurrences": integer,
+                "category": "string",
+                "pattern": "string (optional)",
+                "recommendation": "string"
+              }
+            ]
+          }
+          PROMPT_EOF
+
+      - name: Analyze CI failure (Gemini)
+        id: analyze-gemini
+        if: vars.CI_ANALYZER_BACKEND == 'gemini'
+        uses: google-github-actions/run-gemini-cli@v1
+        with:
+          prompt_file: /tmp/ci-analysis-prompt.md
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+
+      # ── Backend: claude (paid, needs ANTHROPIC_API_KEY) ──
+      - name: Analyze CI failure (Claude)
+        id: analyze-claude
+        if: vars.CI_ANALYZER_BACKEND == 'claude'
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          model: claude-haiku-4-5-20251001
+          allowed_tools: "Bash(gh run view:*),Bash(gh api:*),Bash(cat:*),Bash(ls:*),Read"
+          output_format: json
+          prompt_file: /tmp/ci-analysis-prompt.md
+
+      # Post (or update) the PR comment
       - name: Post failure summary comment
         if: steps.pr.outputs.number != ''
         uses: actions/github-script@v7
         with:
           script: |
-            const body = `${{ steps.analyze.outputs.comment }}`;
+            const fs = require('fs');
+            const prNumber = parseInt(`${{ steps.pr.outputs.number }}`, 10);
+            const runUrl = `https://github.com/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}`;
 
+            // Simple backend writes markdown to a file; AI backends produce JSON in outputs
+            const format = `${{ steps.analyze-simple.outputs.format }}`;
+            let body;
+
+            if (format === 'markdown') {
+              // Simple backend: read markdown directly
+              try {
+                body = fs.readFileSync('/tmp/ci-comment-body.md', 'utf8');
+              } catch (e) {
+                console.log('No markdown file from simple backend:', e.message);
+                return;
+              }
+            } else {
+              // AI backend: read JSON output and format
+              const backend = `${{ vars.CI_ANALYZER_BACKEND }}`;
+              const raw = backend === 'claude'
+                ? `${{ steps.analyze-claude.outputs.output }}`
+                : `${{ steps.analyze-gemini.outputs.output }}`;
+
+              if (!raw || raw.trim() === '') {
+                console.log('No output from AI analysis — skipping');
+                return;
+              }
+
+              let output;
+              try {
+                // Strip markdown fences if present
+                const cleaned = raw.replace(/^```json?\n?/gm, '').replace(/^```$/gm, '');
+                output = JSON.parse(cleaned);
+              } catch (e) {
+                console.log('JSON parse failed:', e.message);
+                // Post the raw output as a fallback
+                body = `## CI Failure Summary\n\nAnalysis output (raw):\n\n\`\`\`\n${raw.substring(0, 2000)}\n\`\`\`\n\n---\n[View logs](${runUrl})`;
+              }
+
+              if (output && !body) {
+                const emoji = {
+                  compilation_error:'🔨', test_failure:'🧪', lint_violation:'📏',
+                  infrastructure_flaky:'🔄', dependency_issue:'📦',
+                  configuration_error:'⚙️', unknown:'❓'
+                };
+
+                const byJob = {};
+                for (const f of output.failures || []) {
+                  (byJob[f.job_name] ||= []).push(f);
+                }
+
+                const classes = [...new Set((output.failures || []).map(f => f.classification))]
+                  .map(c => `${emoji[c]||'❓'} ${c.replace(/_/g,' ')}`).join(', ') || 'unknown';
+
+                body = `## CI Failure Summary\n\n`;
+                body += `**${output.failed_jobs ?? '?'} of ${output.total_jobs ?? '?'} jobs failed** | ${classes}\n\n`;
+
+                for (const [job, failures] of Object.entries(byJob)) {
+                  body += `<details>\n<summary>❌ ${job} — ${failures.length} issue(s)</summary>\n\n`;
+                  for (const f of failures) {
+                    body += `- **${f.test_name || f.job_name}**: \`${(f.error_message||'').substring(0,150)}\`\n`;
+                    body += `  ${f.suggested_fix}\n`;
+                  }
+                  body += `\n</details>\n\n`;
+                }
+
+                if (output.is_flaky) {
+                  body += `> **Flaky** (confidence: ${(output.flaky_confidence??0).toFixed(2)}) — consider re-running.\n\n`;
+                }
+
+                body += `---\n[View logs](${runUrl}) · [Re-run failed jobs](${runUrl})\n`;
+              }
+            }
+
+            if (!body) return;
+
+            // Deduplicate: update existing bot comment
             const comments = await github.rest.issues.listComments({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: ${{ steps.pr.outputs.number }}
+              owner: context.repo.owner, repo: context.repo.repo, issue_number: prNumber
             });
-
-            const marker = '## CI Failure Summary';
             const existing = comments.data.find(c =>
-              c.user.type === 'Bot' && c.body.startsWith(marker)
+              c.user.type === 'Bot' && c.body.startsWith('## CI Failure Summary')
             );
 
             if (existing) {
               await github.rest.issues.updateComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                comment_id: existing.id,
-                body: body
+                owner: context.repo.owner, repo: context.repo.repo,
+                comment_id: existing.id, body
               });
-              console.log(`Updated existing comment ${existing.id}`);
             } else {
               await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: ${{ steps.pr.outputs.number }},
-                body: body
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: prNumber, body
               });
-              console.log('Created new comment');
             }
+
+      # Persist failure info as artifact for recurring issue detection (30-day retention)
+      - name: Save failure history
+        if: always()
+        run: |
+          jq -n \
+            --arg run "${{ github.event.workflow_run.run_number }}" \
+            --arg sha "${{ github.event.workflow_run.head_sha }}" \
+            --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --argjson jobs "$(jq -R -s 'split("\n") | map(select(length > 0))' failed-jobs.txt 2>/dev/null || echo '[]')" \
+            '{"run_number":($run|tonumber),"timestamp":$ts,"sha":$sha,"failed_jobs_list":$jobs}' \
+            > failure-summary.json
+        continue-on-error: true
+
+      - name: Upload failure history
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-failure-${{ github.event.workflow_run.run_number }}
+          path: failure-summary.json
+          retention-days: 30
+
+      # Auto-retry: for simple backend, check if the comment mentions "flaky"
+      # For AI backends, could parse JSON output — but simple grep is more robust
+      - name: Auto-retry if flaky
+        run: |
+          if [ -f /tmp/ci-comment-body.md ] && grep -qi "flaky" /tmp/ci-comment-body.md; then
+            echo "Flaky failure detected — triggering re-run of failed jobs"
+            gh run rerun ${{ github.event.workflow_run.id }} --failed
+          else
+            echo "No flaky signal detected — skipping auto-retry"
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
