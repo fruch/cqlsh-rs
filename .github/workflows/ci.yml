@@ -131,7 +131,7 @@ jobs:
               echo "ScyllaDB ready after ${i} attempt(s)"
               break
             fi
-            if [ "$i" -eq 30 ]; then
+            if [ "$i" -eq 60 ]; then
               echo "ScyllaDB failed to become ready"
               docker logs scylladb
               exit 1
@@ -168,6 +168,8 @@ jobs:
           docker run -d --name cassandra \
             -p 9042:9042 \
             -e CASSANDRA_CLUSTER_NAME=test_cluster \
+            -e CASSANDRA_DC=datacenter1 \
+            -e JVM_EXTRA_OPTS=-Dcassandra.materialized_views_enabled=true \
             cassandra:4.1
           echo "Waiting for Cassandra to be ready (may take up to 5 minutes)..."
           for i in $(seq 1 60); do
