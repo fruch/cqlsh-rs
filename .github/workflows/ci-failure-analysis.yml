@@ -112,18 +112,18 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # ── Backend: simple (default, no API key) ──
+      # Outputs markdown directly — no JSON intermediary
       - name: Analyze CI failure (simple)
         id: analyze-simple
         if: vars.CI_ANALYZER_BACKEND != 'gemini' && vars.CI_ANALYZER_BACKEND != 'claude'
         run: |
-          OUTPUT=$(bash .github/scripts/analyze-ci-failures.sh \
+          bash .github/scripts/analyze-ci-failures.sh \
             ci-artifacts \
             failed-jobs.txt \
             "${{ github.repository }}" \
-            "${{ github.event.workflow_run.id }}")
-          echo "output<<ANALYSIS_EOF" >> "$GITHUB_OUTPUT"
-          echo "$OUTPUT" >> "$GITHUB_OUTPUT"
-          echo "ANALYSIS_EOF" >> "$GITHUB_OUTPUT"
+            "${{ github.event.workflow_run.id }}" \
+            > /tmp/ci-comment-body.md
+          echo "format=markdown" >> "$GITHUB_OUTPUT"
 
       # ── Backend: gemini (free tier, needs GEMINI_API_KEY) ──
       - name: Prepare AI prompt
@@ -222,161 +222,119 @@ jobs:
           output_format: json
           prompt_file: /tmp/ci-analysis-prompt.md
 
-      # Unify outputs from whichever backend ran
-      - name: Collect analysis output
-        id: analyze
-        run: |
-          BACKEND="${{ vars.CI_ANALYZER_BACKEND }}"
-          case "$BACKEND" in
-            claude) OUTPUT='${{ steps.analyze-claude.outputs.output }}' ;;
-            gemini) OUTPUT='${{ steps.analyze-gemini.outputs.output }}' ;;
-            *)      OUTPUT='${{ steps.analyze-simple.outputs.output }}' ;;
-          esac
-          # Strip markdown code fences if present (Gemini sometimes wraps in ```json)
-          OUTPUT=$(echo "$OUTPUT" | sed '/^```/d')
-          echo "output<<ANALYSIS_EOF" >> "$GITHUB_OUTPUT"
-          echo "$OUTPUT" >> "$GITHUB_OUTPUT"
-          echo "ANALYSIS_EOF" >> "$GITHUB_OUTPUT"
-
-      # Format and post (or update) the collapsed PR comment
+      # Post (or update) the PR comment
       - name: Post failure summary comment
         if: steps.pr.outputs.number != ''
         uses: actions/github-script@v7
-        env:
-          ANALYSIS_OUTPUT: ${{ steps.analyze.outputs.output }}
-          CI_BACKEND: ${{ vars.CI_ANALYZER_BACKEND }}
         with:
           script: |
-            const raw = process.env.ANALYSIS_OUTPUT;
-            if (!raw || raw.trim() === '') {
-              console.log('No output from analysis step — skipping comment');
-              return;
-            }
-
-            let output;
-            try {
-              output = JSON.parse(raw);
-            } catch (e) {
-              console.log('Could not parse analysis output as JSON:', e.message);
-              console.log('Raw output:', raw.substring(0, 500));
-              return;
-            }
-
-            const runUrl = `https://github.com/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}`;
-            const backendNames = { claude: 'Claude', gemini: 'Gemini', simple: 'pattern-match' };
-            const backend = backendNames[process.env.CI_BACKEND] || 'pattern-match';
-
-            const classEmoji = {
-              compilation_error:    '🔨',
-              test_failure:         '🧪',
-              lint_violation:       '📏',
-              infrastructure_flaky: '🔄',
-              dependency_issue:     '📦',
-              configuration_error:  '⚙️',
-              unknown:              '❓'
-            };
-
-            // Group failures by job name
-            const byJob = {};
-            for (const f of output.failures || []) {
-              if (!byJob[f.job_name]) byJob[f.job_name] = [];
-              byJob[f.job_name].push(f);
-            }
-
-            // Unique classification labels for the header
-            const classifications = [...new Set((output.failures || []).map(f => f.classification))];
-            const classLabels = classifications
-              .map(c => `${classEmoji[c] || '❓'} ${c.replace(/_/g, ' ')}`)
-              .join(', ') || '❓ unknown';
-
-            const flakyCfg = (output.flaky_confidence ?? 0).toFixed(2);
-
-            let body = `## CI Failure Summary\n\n`;
-            body += `**Status:** ${output.failed_jobs ?? '?'} of ${output.total_jobs ?? '?'} jobs failed`;
-            body += ` | **Classification:** ${classLabels}\n`;
-            body += `**Flaky:** ${output.is_flaky ? 'Yes' : 'No'} (confidence: ${flakyCfg})\n\n`;
-            if (output.summary) body += `> ${output.summary}\n\n`;
-
-            // One collapsed section per failed job
-            for (const [job, failures] of Object.entries(byJob)) {
-              const count = failures.length;
-              body += `<details>\n`;
-              body += `<summary>❌ <b>${job}</b> — ${count} issue${count > 1 ? 's' : ''} (<a href="${runUrl}">job log</a>)</summary>\n\n`;
-              for (const f of failures) {
-                const title = f.test_name || f.job_name;
-                const errMsg = (f.error_message || '').substring(0, 200);
-                body += `### \`${title}\`\n`;
-                body += `- **Error:** \`${errMsg}\`\n`;
-                body += `- **Root cause:** ${f.root_cause}\n`;
-                body += `- **Suggested fix:** ${f.suggested_fix}\n`;
-                if (f.file_reference) body += `- **File:** \`${f.file_reference}\`\n`;
-                const cls = f.classification || 'unknown';
-                body += `- **Category:** ${classEmoji[cls] || '❓'} ${cls.replace(/_/g, ' ')}\n\n`;
-              }
-              body += `</details>\n\n`;
-            }
-
-            // Recurring issues table (collapsed)
-            if (output.recurring_issues && output.recurring_issues.length > 0) {
-              body += `<details>\n`;
-              body += `<summary>📊 <b>Recurring Issues</b> (seen across recent runs)</summary>\n\n`;
-              body += `| Issue | Occurrences | Category | Recommendation |\n`;
-              body += `|-------|-------------|----------|----------------|\n`;
-              for (const ri of output.recurring_issues) {
-                body += `| ${ri.issue} | ${ri.occurrences} | ${ri.category} | ${ri.recommendation} |\n`;
-              }
-              body += `\n</details>\n\n`;
-            }
-
-            body += `---\n`;
-            body += `*🤖 Analyzed by ${backend} • [Re-run failed jobs](${runUrl})*\n`;
-
-            // Deduplicate: update existing bot comment rather than posting a new one
+            const fs = require('fs');
             const prNumber = parseInt(`${{ steps.pr.outputs.number }}`, 10);
-            const comments = await github.rest.issues.listComments({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: prNumber
-            });
+            const runUrl = `https://github.com/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}`;
 
-            const marker = '## CI Failure Summary';
+            // Simple backend writes markdown to a file; AI backends produce JSON in outputs
+            const format = `${{ steps.analyze-simple.outputs.format }}`;
+            let body;
+
+            if (format === 'markdown') {
+              // Simple backend: read markdown directly
+              try {
+                body = fs.readFileSync('/tmp/ci-comment-body.md', 'utf8');
+              } catch (e) {
+                console.log('No markdown file from simple backend:', e.message);
+                return;
+              }
+            } else {
+              // AI backend: read JSON output and format
+              const backend = `${{ vars.CI_ANALYZER_BACKEND }}`;
+              const raw = backend === 'claude'
+                ? `${{ steps.analyze-claude.outputs.output }}`
+                : `${{ steps.analyze-gemini.outputs.output }}`;
+
+              if (!raw || raw.trim() === '') {
+                console.log('No output from AI analysis — skipping');
+                return;
+              }
+
+              let output;
+              try {
+                // Strip markdown fences if present
+                const cleaned = raw.replace(/^```json?\n?/gm, '').replace(/^```$/gm, '');
+                output = JSON.parse(cleaned);
+              } catch (e) {
+                console.log('JSON parse failed:', e.message);
+                // Post the raw output as a fallback
+                body = `## CI Failure Summary\n\nAnalysis output (raw):\n\n\`\`\`\n${raw.substring(0, 2000)}\n\`\`\`\n\n---\n[View logs](${runUrl})`;
+              }
+
+              if (output && !body) {
+                const emoji = {
+                  compilation_error:'🔨', test_failure:'🧪', lint_violation:'📏',
+                  infrastructure_flaky:'🔄', dependency_issue:'📦',
+                  configuration_error:'⚙️', unknown:'❓'
+                };
+
+                const byJob = {};
+                for (const f of output.failures || []) {
+                  (byJob[f.job_name] ||= []).push(f);
+                }
+
+                const classes = [...new Set((output.failures || []).map(f => f.classification))]
+                  .map(c => `${emoji[c]||'❓'} ${c.replace(/_/g,' ')}`).join(', ') || 'unknown';
+
+                body = `## CI Failure Summary\n\n`;
+                body += `**${output.failed_jobs ?? '?'} of ${output.total_jobs ?? '?'} jobs failed** | ${classes}\n\n`;
+
+                for (const [job, failures] of Object.entries(byJob)) {
+                  body += `<details>\n<summary>❌ ${job} — ${failures.length} issue(s)</summary>\n\n`;
+                  for (const f of failures) {
+                    body += `- **${f.test_name || f.job_name}**: \`${(f.error_message||'').substring(0,150)}\`\n`;
+                    body += `  ${f.suggested_fix}\n`;
+                  }
+                  body += `\n</details>\n\n`;
+                }
+
+                if (output.is_flaky) {
+                  body += `> **Flaky** (confidence: ${(output.flaky_confidence??0).toFixed(2)}) — consider re-running.\n\n`;
+                }
+
+                body += `---\n[View logs](${runUrl}) · [Re-run failed jobs](${runUrl})\n`;
+              }
+            }
+
+            if (!body) return;
+
+            // Deduplicate: update existing bot comment
+            const comments = await github.rest.issues.listComments({
+              owner: context.repo.owner, repo: context.repo.repo, issue_number: prNumber
+            });
             const existing = comments.data.find(c =>
-              c.user.type === 'Bot' && c.body.startsWith(marker)
+              c.user.type === 'Bot' && c.body.startsWith('## CI Failure Summary')
             );
 
             if (existing) {
               await github.rest.issues.updateComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                comment_id: existing.id,
-                body
+                owner: context.repo.owner, repo: context.repo.repo,
+                comment_id: existing.id, body
               });
-              console.log(`Updated existing CI failure comment #${existing.id}`);
             } else {
               await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: prNumber,
-                body
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: prNumber, body
               });
-              console.log('Created new CI failure comment');
             }
 
-      # Persist failure summary as artifact for recurring issue detection (30-day retention)
+      # Persist failure info as artifact for recurring issue detection (30-day retention)
       - name: Save failure history
         if: always()
         run: |
-          ANALYSIS='${{ steps.analyze.outputs.output }}'
-          if [ -n "$ANALYSIS" ]; then
-            echo "$ANALYSIS" | \
-              jq --arg run "${{ github.event.workflow_run.run_number }}" \
-                 --arg sha "${{ github.event.workflow_run.head_sha }}" \
-                 --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-                 '. + {"run_number": ($run | tonumber), "timestamp": $ts, "sha": $sha}' \
-              > failure-summary.json 2>/dev/null || echo '{}' > failure-summary.json
-          else
-            echo '{}' > failure-summary.json
-          fi
+          jq -n \
+            --arg run "${{ github.event.workflow_run.run_number }}" \
+            --arg sha "${{ github.event.workflow_run.head_sha }}" \
+            --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --argjson jobs "$(jq -R -s 'split("\n") | map(select(length > 0))' failed-jobs.txt 2>/dev/null || echo '[]')" \
+            '{"run_number":($run|tonumber),"timestamp":$ts,"sha":$sha,"failed_jobs_list":$jobs}' \
+            > failure-summary.json
         continue-on-error: true
 
       - name: Upload failure history
@@ -387,14 +345,15 @@ jobs:
           path: failure-summary.json
           retention-days: 30
 
-      # Auto-retry failed jobs when a high-confidence flaky failure is detected
+      # Auto-retry: for simple backend, check if the comment mentions "flaky"
+      # For AI backends, could parse JSON output — but simple grep is more robust
       - name: Auto-retry if flaky
-        if: >
-          steps.analyze.outputs.output != '' &&
-          fromJSON(steps.analyze.outputs.output).is_flaky == true &&
-          fromJSON(steps.analyze.outputs.output).flaky_confidence > 0.8
         run: |
-          echo "Flaky failure detected — triggering re-run of failed jobs"
-          gh run rerun ${{ github.event.workflow_run.id }} --failed
+          if [ -f /tmp/ci-comment-body.md ] && grep -qi "flaky" /tmp/ci-comment-body.md; then
+            echo "Flaky failure detected — triggering re-run of failed jobs"
+            gh run rerun ${{ github.event.workflow_run.id }} --failed
+          else
+            echo "No flaky signal detected — skipping auto-retry"
+          fi
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
