@@ -70,7 +70,7 @@ jobs:
       - name: Run tests
         shell: bash
         run: |
-          cargo nextest run --all-targets --all-features --message-format junit > test-results.xml
+          cargo nextest run --all-targets --all-features --profile ci
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
