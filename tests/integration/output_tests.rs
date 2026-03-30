@@ -430,6 +430,71 @@ fn test_describe_cluster_output() {
     );
 }
 
+#[test]
+#[ignore = "requires Docker"]
+fn test_describe_materialized_view_output() {
+    let scylla = get_scylla();
+    let ks = create_test_keyspace(scylla, "desc_mv");
+
+    // Create base table
+    execute_cql(
+        scylla,
+        &format!("CREATE TABLE {ks}.mv_base (id int, name text, age int, PRIMARY KEY (id, name))"),
+    )
+    .success();
+
+    // Try creating MV — skip test if MVs are not supported (e.g. Cassandra 4.1
+    // with materialized_views_enabled=false).
+    let mv_create = cqlsh_cmd(scylla)
+        .args([
+            "-e",
+            &format!(
+                "CREATE MATERIALIZED VIEW {ks}.mv_by_name AS \
+                 SELECT id, name, age FROM {ks}.mv_base \
+                 WHERE name IS NOT NULL AND id IS NOT NULL \
+                 PRIMARY KEY (name, id)"
+            ),
+        ])
+        .output()
+        .expect("failed to execute cqlsh-rs");
+
+    if !mv_create.status.success() {
+        let stderr = String::from_utf8_lossy(&mv_create.stderr);
+        if stderr.contains("Materialized views are not enabled")
+            || stderr.contains("materialized_views_enabled")
+            || stderr.contains("not yet supported")
+        {
+            eprintln!("Skipping test_describe_materialized_view_output: MVs not enabled");
+            drop_test_keyspace(scylla, &ks);
+            return;
+        }
+        panic!("MV creation failed unexpectedly: {stderr}");
+    }
+
+    let output = execute_cql_output(
+        scylla,
+        &format!("DESCRIBE MATERIALIZED VIEW {ks}.mv_by_name"),
+    );
+    assert!(
+        output.contains("CREATE MATERIALIZED VIEW"),
+        "DESCRIBE MV should show CREATE statement: {output}"
+    );
+    assert!(
+        output.contains("mv_by_name"),
+        "DESCRIBE MV should include view name: {output}"
+    );
+    assert!(
+        output.contains("mv_base"),
+        "DESCRIBE MV should reference base table: {output}"
+    );
+    assert!(
+        output.contains("PRIMARY KEY"),
+        "DESCRIBE MV should show PRIMARY KEY: {output}"
+    );
+
+    drop_test_keyspace(scylla, &ks);
+}
+
 // ---------------------------------------------------------------------------
 // 3.11 — SHOW output tests
 // ---------------------------------------------------------------------------
