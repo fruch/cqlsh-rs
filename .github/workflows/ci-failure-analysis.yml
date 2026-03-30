@@ -1,14 +1,12 @@
 name: CI Failure Analysis
 
-# Analyzes CI failures using Gemini 2.5 Flash (free tier) and posts a
-# structured PR comment with root cause, suggested fix, and flaky detection.
+# Analyzes CI failures and posts a structured, collapsed PR comment.
 # Triggered by workflow_run after the CI workflow completes with a failure.
 #
-# Requires GEMINI_API_KEY secret (free from https://aistudio.google.com/apikey).
-#
-# Alternative backends (set via repository variables):
-#   CI_ANALYZER_BACKEND=claude  → uses anthropics/claude-code-action (~$0.005/run, needs ANTHROPIC_API_KEY)
-#   CI_ANALYZER_BACKEND=gemini  → default, uses google-github-actions/run-gemini-cli (free tier)
+# Three backends (set via CI_ANALYZER_BACKEND repository variable):
+#   simple  — default, no API key needed, pattern-matching on CI artifacts
+#   gemini  — Gemini 2.5 Flash free tier, needs GEMINI_API_KEY (free)
+#   claude  — Claude Haiku (~$0.005/run), needs ANTHROPIC_API_KEY
 
 on:
   workflow_run:
@@ -33,7 +31,7 @@ jobs:
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
 
-      # Download JUnit XML test results from the failed CI run
+      # Download CI artifacts from the failed run
       - name: Download test results
         uses: actions/download-artifact@v4
         with:
@@ -43,7 +41,6 @@ jobs:
           path: ci-artifacts/
         continue-on-error: true
 
-      # Download clippy JSON from the failed CI run
       - name: Download clippy results
         uses: actions/download-artifact@v4
         with:
@@ -53,7 +50,6 @@ jobs:
           path: ci-artifacts/
         continue-on-error: true
 
-      # Download build JSON from the failed CI run
       - name: Download build results
         uses: actions/download-artifact@v4
         with:
@@ -63,11 +59,19 @@ jobs:
           path: ci-artifacts/
         continue-on-error: true
 
-      # Download fmt output from the failed CI run
       - name: Download fmt results
         uses: actions/download-artifact@v4
         with:
           name: fmt-results
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: ci-artifacts/
+        continue-on-error: true
+
+      - name: Download integration test results
+        uses: actions/download-artifact@v4
+        with:
+          name: integration-test-results
           run-id: ${{ github.event.workflow_run.id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
           path: ci-artifacts/
@@ -95,9 +99,36 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # Prepare the shared analysis prompt (used by both backends)
-      - name: Prepare analysis prompt
+      # Get failed job names for the simple backend
+      - name: Get failed jobs
+        id: failed-jobs
+        run: |
+          gh run view ${{ github.event.workflow_run.id }} --json jobs \
+            --jq '.jobs[] | select(.conclusion == "failure") | .name' \
+            > failed-jobs.txt || true
+          echo "Failed jobs:"
+          cat failed-jobs.txt
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # ── Backend: simple (default, no API key) ──
+      - name: Analyze CI failure (simple)
+        id: analyze-simple
+        if: vars.CI_ANALYZER_BACKEND != 'gemini' && vars.CI_ANALYZER_BACKEND != 'claude'
+        run: |
+          OUTPUT=$(bash .github/scripts/analyze-ci-failures.sh \
+            ci-artifacts \
+            failed-jobs.txt \
+            "${{ github.repository }}" \
+            "${{ github.event.workflow_run.id }}")
+          echo "output<<ANALYSIS_EOF" >> "$GITHUB_OUTPUT"
+          echo "$OUTPUT" >> "$GITHUB_OUTPUT"
+          echo "ANALYSIS_EOF" >> "$GITHUB_OUTPUT"
+
+      # ── Backend: gemini (free tier, needs GEMINI_API_KEY) ──
+      - name: Prepare AI prompt
         id: prompt
+        if: vars.CI_ANALYZER_BACKEND == 'gemini' || vars.CI_ANALYZER_BACKEND == 'claude'
         run: |
           cat > /tmp/ci-analysis-prompt.md <<'PROMPT_EOF'
           Analyze the CI failure for this pull request.
@@ -170,17 +201,16 @@ jobs:
           }
           PROMPT_EOF
 
-      # --- Backend: Gemini (default, free tier) ---
       - name: Analyze CI failure (Gemini)
         id: analyze-gemini
-        if: vars.CI_ANALYZER_BACKEND != 'claude'
+        if: vars.CI_ANALYZER_BACKEND == 'gemini'
         uses: google-github-actions/run-gemini-cli@v1
         with:
           prompt_file: /tmp/ci-analysis-prompt.md
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
 
-      # --- Backend: Claude (opt-in via CI_ANALYZER_BACKEND=claude) ---
+      # ── Backend: claude (paid, needs ANTHROPIC_API_KEY) ──
       - name: Analyze CI failure (Claude)
         id: analyze-claude
         if: vars.CI_ANALYZER_BACKEND == 'claude'
@@ -196,11 +226,12 @@ jobs:
       - name: Collect analysis output
         id: analyze
         run: |
-          if [ "${{ vars.CI_ANALYZER_BACKEND }}" = "claude" ]; then
-            OUTPUT='${{ steps.analyze-claude.outputs.output }}'
-          else
-            OUTPUT='${{ steps.analyze-gemini.outputs.output }}'
-          fi
+          BACKEND="${{ vars.CI_ANALYZER_BACKEND }}"
+          case "$BACKEND" in
+            claude) OUTPUT='${{ steps.analyze-claude.outputs.output }}' ;;
+            gemini) OUTPUT='${{ steps.analyze-gemini.outputs.output }}' ;;
+            *)      OUTPUT='${{ steps.analyze-simple.outputs.output }}' ;;
+          esac
           # Strip markdown code fences if present (Gemini sometimes wraps in ```json)
           OUTPUT=$(echo "$OUTPUT" | sed '/^```/d')
           echo "output<<ANALYSIS_EOF" >> "$GITHUB_OUTPUT"
@@ -213,6 +244,7 @@ jobs:
         uses: actions/github-script@v7
         env:
           ANALYSIS_OUTPUT: ${{ steps.analyze.outputs.output }}
+          CI_BACKEND: ${{ vars.CI_ANALYZER_BACKEND }}
         with:
           script: |
             const raw = process.env.ANALYSIS_OUTPUT;
@@ -231,7 +263,8 @@ jobs:
             }
 
             const runUrl = `https://github.com/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}`;
-            const backend = `${{ vars.CI_ANALYZER_BACKEND }}` === 'claude' ? 'Claude' : 'Gemini';
+            const backendNames = { claude: 'Claude', gemini: 'Gemini', simple: 'pattern-match' };
+            const backend = backendNames[process.env.CI_BACKEND] || 'pattern-match';
 
             const classEmoji = {
               compilation_error:    '🔨',
@@ -354,7 +387,7 @@ jobs:
           path: failure-summary.json
           retention-days: 30
 
-      # Auto-retry failed jobs when AI detects a high-confidence flaky failure
+      # Auto-retry failed jobs when a high-confidence flaky failure is detected
       - name: Auto-retry if flaky
         if: >
           steps.analyze.outputs.output != '' &&
